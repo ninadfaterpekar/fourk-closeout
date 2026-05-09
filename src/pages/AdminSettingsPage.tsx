@@ -1,0 +1,135 @@
+import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { useCloseoutContext } from '../app/CloseoutContext'
+import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import { SectionTitle } from '../components/ui/SectionTitle'
+
+export const AdminSettingsPage = () => {
+  const { serverOptions, addServerOption, updateServerOption, deleteServerOption } = useCloseoutContext()
+  const [newServerName, setNewServerName] = useState('')
+  const [editingServerId, setEditingServerId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+
+  const handleAddServer = () => {
+    const cleaned = newServerName.trim()
+    if (!cleaned) return
+    addServerOption(cleaned)
+    setNewServerName('')
+  }
+
+  const startEdit = (id: string, name: string) => {
+    setEditingServerId(id)
+    setEditingName(name)
+  }
+
+  const saveEdit = () => {
+    if (!editingServerId) return
+    const cleaned = editingName.trim()
+    if (!cleaned) return
+    updateServerOption(editingServerId, cleaned)
+    setEditingServerId(null)
+    setEditingName('')
+  }
+
+  return (
+    <div className="space-y-4">
+      <SectionTitle
+        eyebrow="Configuration"
+        title="Admin Settings"
+        description="Store-level defaults and server roster management. Local-only state for now."
+      />
+
+      <Card title="Default Shift Settings">
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="space-y-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Store Name</span>
+            <input
+              defaultValue="Fourk Grill - Midtown"
+              className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Default Petty Cash Float</span>
+            <input
+              defaultValue="300"
+              className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+            />
+          </label>
+        </div>
+
+        <div className="mt-3 flex justify-end">
+          <Button type="button" variant="secondary" className="px-3 py-2 text-xs" onClick={() => window.alert('Settings saved locally (mock).')}>
+            Save Settings
+          </Button>
+        </div>
+      </Card>
+
+      <Card title="Server Management" subtitle="These names power the standard server dropdown in New Closeout.">
+        <div className="mb-3 flex flex-wrap gap-2">
+          <input
+            type="text"
+            value={newServerName}
+            onChange={(event) => setNewServerName(event.target.value)}
+            placeholder="Add new server name"
+            className="h-9 min-w-[220px] flex-1 rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+          />
+          <Button type="button" className="px-3 py-2 text-xs" onClick={handleAddServer}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Server
+          </Button>
+        </div>
+
+        <div className="space-y-2">
+          {serverOptions.map((server) => (
+            <div key={server.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-2">
+              {editingServerId === server.id ? (
+                <>
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={(event) => setEditingName(event.target.value)}
+                    className="h-8 flex-1 rounded-md border border-slate-300 px-2 text-sm text-slate-800 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+                  />
+                  <Button type="button" className="px-2.5 py-1.5 text-xs" onClick={saveEdit}>
+                    Save
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="px-2.5 py-1.5 text-xs"
+                    onClick={() => {
+                      setEditingServerId(null)
+                      setEditingName('')
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="flex-1 text-sm text-slate-800">{server.name}</p>
+                  <button
+                    type="button"
+                    onClick={() => startEdit(server.id, server.name)}
+                    className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                    aria-label="Edit server"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteServerOption(server.id)}
+                    className="rounded-md p-1.5 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+                    aria-label="Delete server"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  )
+}
