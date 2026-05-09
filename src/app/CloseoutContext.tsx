@@ -59,8 +59,12 @@ const buildRecord = (id: string, payload: NewCloseoutPayload, createdAt: string)
 })
 
 export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
-  const [serverOptions, setServerOptions] = useState<ServerOption[]>(initialServerOptions)
-  const [closeoutHistory, setCloseoutHistory] = useState<CloseoutRecord[]>(initialCloseoutHistory)
+  const [serverOptions, setServerOptions] = useState<ServerOption[]>(
+    isSupabaseConfigured ? [] : initialServerOptions,
+  )
+  const [closeoutHistory, setCloseoutHistory] = useState<CloseoutRecord[]>(
+    isSupabaseConfigured ? [] : initialCloseoutHistory,
+  )
   const draftAutosaveHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
 
   const refreshServersFromSupabase = useCallback(async () => {
@@ -87,7 +91,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
         if (remoteServers) setServerOptions(remoteServers)
         if (remoteCloseouts) setCloseoutHistory(remoteCloseouts)
       } catch (error) {
-        console.warn('Supabase load failed, falling back to local mock state.', error)
+        console.error('Supabase load failed.', error)
       }
     }
 
@@ -151,94 +155,81 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       nextRecord.submittedAt = timestamp
     }
 
-    setCloseoutHistory((prev) => [nextRecord, ...prev])
-
-    try {
+    if (isSupabaseConfigured) {
       await upsertCloseoutToSupabase(nextRecord)
-    } catch (error) {
-      console.warn('Supabase closeout create failed, keeping local record.', error)
     }
+
+    setCloseoutHistory((prev) => [nextRecord, ...prev])
 
     return nextRecord
   }, [])
 
   const saveDraft = useCallback(async (payload: NewCloseoutPayload, existingDraftId?: string) => {
     const timestamp = new Date().toISOString()
+    const draftId = existingDraftId ?? createCloseoutId()
+    const existingDraft = existingDraftId
+      ? closeoutHistory.find((record) => record.id === existingDraftId)
+      : undefined
 
-    if (!existingDraftId) {
-      return createCloseout({ ...payload, status: 'Draft' })
-    }
-
-    let updatedRecord: CloseoutRecord | null = null
-    setCloseoutHistory((prev) =>
-      prev.map((record) => {
-        if (record.id !== existingDraftId) return record
-
-        updatedRecord = {
-          ...record,
-          headerData: cloneHeader(payload.headerData),
-          serverRows: cloneServerRows(payload.serverRows),
-          pettyCashData: clonePettyCash(payload.pettyCashData),
-          status: 'Draft',
-          submittedAt: undefined,
-          createdAt: record.createdAt || timestamp,
-        }
-        return updatedRecord
+    const finalRecord: CloseoutRecord = {
+      ...(existingDraft ?? {
+        id: draftId,
+        createdAt: timestamp,
+        editHistory: [],
       }),
-    )
-
-    const finalRecord = updatedRecord ?? buildRecord(existingDraftId, { ...payload, status: 'Draft' }, timestamp)
-
-    if (!updatedRecord) {
-      setCloseoutHistory((prev) => [finalRecord, ...prev])
+      id: draftId,
+      headerData: cloneHeader(payload.headerData),
+      serverRows: cloneServerRows(payload.serverRows),
+      pettyCashData: clonePettyCash(payload.pettyCashData),
+      status: 'Draft',
+      submittedAt: undefined,
+      createdAt: existingDraft?.createdAt ?? timestamp,
+      editHistory: existingDraft?.editHistory ?? [],
     }
 
-    try {
+    if (isSupabaseConfigured) {
       await upsertCloseoutToSupabase(finalRecord)
-    } catch (error) {
-      console.warn('Supabase draft save failed, keeping local draft.', error)
     }
+
+    setCloseoutHistory((prev) => {
+      const existingIndex = prev.findIndex((record) => record.id === draftId)
+      if (existingIndex === -1) return [finalRecord, ...prev]
+      return prev.map((record) => (record.id === draftId ? finalRecord : record))
+    })
 
     return finalRecord
-  }, [createCloseout])
+  }, [closeoutHistory])
 
   const saveCloseoutEdit = useCallback(async (id: string, payload: EditCloseoutPayload) => {
     const timestamp = new Date().toISOString()
-    let editedRecord: CloseoutRecord | null = null
+    const existingRecord = closeoutHistory.find((record) => record.id === id)
+    if (!existingRecord) return
+
+    const editedRecord: CloseoutRecord = {
+      ...existingRecord,
+      headerData: cloneHeader(payload.headerData),
+      serverRows: cloneServerRows(payload.serverRows),
+      pettyCashData: clonePettyCash(payload.pettyCashData),
+      status: payload.status,
+      submittedAt: payload.status === 'Submitted' ? existingRecord.submittedAt ?? timestamp : undefined,
+      editHistory: [
+        {
+          id: `note-${crypto.randomUUID()}`,
+          timestamp,
+          reason: payload.reason,
+        },
+        ...existingRecord.editHistory,
+      ],
+    }
+
+    if (isSupabaseConfigured) {
+      await upsertCloseoutToSupabase(editedRecord, payload.reason)
+    }
 
     setCloseoutHistory((prev) =>
-      prev.map((record) => {
-        if (record.id !== id) return record
-
-        editedRecord = {
-          ...record,
-          headerData: cloneHeader(payload.headerData),
-          serverRows: cloneServerRows(payload.serverRows),
-          pettyCashData: clonePettyCash(payload.pettyCashData),
-          status: payload.status,
-          submittedAt: payload.status === 'Submitted' ? record.submittedAt ?? timestamp : undefined,
-          editHistory: [
-            {
-              id: `note-${crypto.randomUUID()}`,
-              timestamp,
-              reason: payload.reason,
-            },
-            ...record.editHistory,
-          ],
-        }
-
-        return editedRecord
-      }),
+      prev.map((record) => (record.id === id ? editedRecord : record)),
     )
-
-    if (!editedRecord) return
-
-    try {
-      await upsertCloseoutToSupabase(editedRecord, payload.reason)
-    } catch (error) {
-      console.warn('Supabase closeout edit failed, keeping local edit.', error)
-    }
-  }, [])
+  }, [closeoutHistory])
 
   const registerDraftAutosaveHandler = useCallback((handler: (() => Promise<boolean>) | null) => {
     draftAutosaveHandlerRef.current = handler

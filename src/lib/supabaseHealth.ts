@@ -1,4 +1,7 @@
 import { isSupabaseConfigured, supabase } from './supabase'
+import { DEFAULT_RESTAURANT_ID } from './supabaseStore'
+
+const HEALTHCHECK_SERVER_ID = 'ffffffff-ffff-ffff-ffff-ffffffffffff'
 
 const getMissingEnvVars = () => {
   const missing: string[] = []
@@ -31,6 +34,27 @@ export const runSupabaseHealthCheck = async () => {
     console.info(
       `[Supabase Health] closeouts table query succeeded (sample rows: ${data?.length ?? 0}).`,
     )
+
+    const { error: writeProbeError } = await supabase
+      .from('servers')
+      .upsert(
+        {
+          id: HEALTHCHECK_SERVER_ID,
+          restaurant_id: DEFAULT_RESTAURANT_ID,
+          name: 'Health Check Server',
+          is_active: false,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' },
+      )
+
+    if (writeProbeError) {
+      console.warn(
+        `[Supabase Health] Write probe failed for servers table: ${writeProbeError.message}`,
+      )
+    } else {
+      console.info('[Supabase Health] Write probe succeeded for servers table.')
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error(`[Supabase Health] Connection check failed: ${message}`)

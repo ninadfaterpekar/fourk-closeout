@@ -11,12 +11,29 @@ export const AdminSettingsPage = () => {
   const [editingServerId, setEditingServerId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [errorToast, setErrorToast] = useState('')
+  const [successToast, setSuccessToast] = useState('')
+  const [storeName, setStoreName] = useState(() => window.localStorage.getItem('fourk.settings.storeName') ?? 'Fourk Grill - Midtown')
+  const [defaultPettyCashFloat, setDefaultPettyCashFloat] = useState(
+    () => window.localStorage.getItem('fourk.settings.defaultPettyCashFloat') ?? '300',
+  )
 
   useEffect(() => {
     if (!errorToast) return
     const timeoutId = window.setTimeout(() => setErrorToast(''), 2500)
     return () => window.clearTimeout(timeoutId)
   }, [errorToast])
+
+  useEffect(() => {
+    if (!successToast) return
+    const timeoutId = window.setTimeout(() => setSuccessToast(''), 2500)
+    return () => window.clearTimeout(timeoutId)
+  }, [successToast])
+
+  const handleSaveSettings = () => {
+    window.localStorage.setItem('fourk.settings.storeName', storeName.trim() || 'Fourk Grill - Midtown')
+    window.localStorage.setItem('fourk.settings.defaultPettyCashFloat', defaultPettyCashFloat.trim() || '300')
+    setSuccessToast('Settings saved.')
+  }
 
   const handleAddServer = async () => {
     const cleaned = newServerName.trim()
@@ -73,21 +90,23 @@ export const AdminSettingsPage = () => {
           <label className="space-y-1">
             <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Store Name</span>
             <input
-              defaultValue="Fourk Grill - Midtown"
+              value={storeName}
+              onChange={(event) => setStoreName(event.target.value)}
               className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
             />
           </label>
           <label className="space-y-1">
             <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Default Petty Cash Float</span>
             <input
-              defaultValue="300"
+              value={defaultPettyCashFloat}
+              onChange={(event) => setDefaultPettyCashFloat(event.target.value)}
               className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
             />
           </label>
         </div>
 
         <div className="mt-3 flex justify-end">
-          <Button type="button" variant="secondary" className="px-3 py-2 text-xs" onClick={() => window.alert('Settings saved locally (mock).')}>
+          <Button type="button" variant="secondary" className="px-3 py-2 text-xs" onClick={handleSaveSettings}>
             Save Settings
           </Button>
         </div>
@@ -162,6 +181,11 @@ export const AdminSettingsPage = () => {
       {errorToast && (
         <div className="fixed bottom-5 right-6 z-[60] rounded-lg bg-red-700 px-3 py-2 text-xs font-medium text-white shadow-lg shadow-red-700/35">
           {errorToast}
+        </div>
+      )}
+      {successToast && (
+        <div className="fixed bottom-5 right-6 z-[60] rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white shadow-lg shadow-slate-900/35">
+          {successToast}
         </div>
       )}
     </div>

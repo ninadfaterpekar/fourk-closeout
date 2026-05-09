@@ -87,3 +87,121 @@ create table if not exists email_recipients (
 );
 
 create index if not exists idx_email_recipients_restaurant on email_recipients(restaurant_id, is_active);
+
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+
+alter table restaurants enable row level security;
+alter table app_users enable row level security;
+alter table servers enable row level security;
+alter table closeouts enable row level security;
+alter table server_payouts enable row level security;
+alter table petty_cash_records enable row level security;
+alter table closeout_edit_history enable row level security;
+alter table email_recipients enable row level security;
+
+drop policy if exists restaurants_dev_access on restaurants;
+create policy restaurants_dev_access
+on restaurants
+for all
+to anon, authenticated
+using (id = '00000000-0000-0000-0000-000000000001'::uuid)
+with check (id = '00000000-0000-0000-0000-000000000001'::uuid);
+
+drop policy if exists app_users_dev_access on app_users;
+create policy app_users_dev_access
+on app_users
+for all
+to anon, authenticated
+using (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+with check (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid);
+
+drop policy if exists servers_dev_access on servers;
+create policy servers_dev_access
+on servers
+for all
+to anon, authenticated
+using (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+with check (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid);
+
+drop policy if exists closeouts_dev_access on closeouts;
+create policy closeouts_dev_access
+on closeouts
+for all
+to anon, authenticated
+using (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+with check (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid);
+
+drop policy if exists server_payouts_dev_access on server_payouts;
+create policy server_payouts_dev_access
+on server_payouts
+for all
+to anon, authenticated
+using (
+  exists (
+    select 1
+    from closeouts c
+    where c.id = server_payouts.closeout_id
+      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+  )
+)
+with check (
+  exists (
+    select 1
+    from closeouts c
+    where c.id = server_payouts.closeout_id
+      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+  )
+);
+
+drop policy if exists petty_cash_records_dev_access on petty_cash_records;
+create policy petty_cash_records_dev_access
+on petty_cash_records
+for all
+to anon, authenticated
+using (
+  exists (
+    select 1
+    from closeouts c
+    where c.id = petty_cash_records.closeout_id
+      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+  )
+)
+with check (
+  exists (
+    select 1
+    from closeouts c
+    where c.id = petty_cash_records.closeout_id
+      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+  )
+);
+
+drop policy if exists closeout_edit_history_dev_access on closeout_edit_history;
+create policy closeout_edit_history_dev_access
+on closeout_edit_history
+for all
+to anon, authenticated
+using (
+  exists (
+    select 1
+    from closeouts c
+    where c.id = closeout_edit_history.closeout_id
+      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+  )
+)
+with check (
+  exists (
+    select 1
+    from closeouts c
+    where c.id = closeout_edit_history.closeout_id
+      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+  )
+);
+
+drop policy if exists email_recipients_dev_access on email_recipients;
+create policy email_recipients_dev_access
+on email_recipients
+for all
+to anon, authenticated
+using (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+with check (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid);

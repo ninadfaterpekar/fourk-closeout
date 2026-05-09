@@ -82,6 +82,7 @@ export const NewCloseoutPage = () => {
   const [errors, setErrors] = useState<FormErrors>({})
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [lastDraftId, setLastDraftId] = useState<string | undefined>()
+  const [syncErrorToast, setSyncErrorToast] = useState('')
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState(
     serializeDraft(initialState.headerData, initialState.serverRows, initialState.pettyCashData),
   )
@@ -184,23 +185,35 @@ export const NewCloseoutPage = () => {
   }
 
   useEffect(() => {
+    if (!syncErrorToast) return
+    const timeoutId = window.setTimeout(() => setSyncErrorToast(''), 3000)
+    return () => window.clearTimeout(timeoutId)
+  }, [syncErrorToast])
+
+  useEffect(() => {
     registerDraftAutosaveHandler(async () => {
       const hasChanges = currentSnapshot !== lastSavedSnapshot
       if (!hasChanges) return false
 
-      const savedRecord = await saveDraft(
-        {
-          headerData,
-          serverRows,
-          pettyCashData,
-          status: 'Draft',
-        },
-        lastDraftId,
-      )
+      try {
+        const savedRecord = await saveDraft(
+          {
+            headerData,
+            serverRows,
+            pettyCashData,
+            status: 'Draft',
+          },
+          lastDraftId,
+        )
 
-      setLastDraftId(savedRecord.id)
-      setLastSavedSnapshot(currentSnapshot)
-      return true
+        setLastDraftId(savedRecord.id)
+        setLastSavedSnapshot(currentSnapshot)
+        return true
+      } catch (error) {
+        console.error('Draft autosave failed.', error)
+        setSyncErrorToast('Could not autosave draft. Check Supabase setup and try again.')
+        return false
+      }
     })
 
     return () => registerDraftAutosaveHandler(null)
@@ -216,18 +229,23 @@ export const NewCloseoutPage = () => {
   ])
 
   const saveDraftAndExit = async () => {
-    const savedRecord = await saveDraft(
-      {
-        headerData,
-        serverRows,
-        pettyCashData,
-        status: 'Draft',
-      },
-      lastDraftId,
-    )
-    setLastDraftId(savedRecord.id)
-    setLastSavedSnapshot(currentSnapshot)
-    navigate('/closeout-history')
+    try {
+      const savedRecord = await saveDraft(
+        {
+          headerData,
+          serverRows,
+          pettyCashData,
+          status: 'Draft',
+        },
+        lastDraftId,
+      )
+      setLastDraftId(savedRecord.id)
+      setLastSavedSnapshot(currentSnapshot)
+      navigate('/closeout-history')
+    } catch (error) {
+      console.error('Save draft failed.', error)
+      setSyncErrorToast('Could not save draft. Check Supabase setup and try again.')
+    }
   }
 
   const submitCloseout = () => {
@@ -244,15 +262,20 @@ export const NewCloseoutPage = () => {
   }
 
   const confirmSubmitCloseout = async () => {
-    await createCloseout({
-      headerData,
-      serverRows,
-      pettyCashData,
-      status: 'Submitted',
-    })
+    try {
+      await createCloseout({
+        headerData,
+        serverRows,
+        pettyCashData,
+        status: 'Submitted',
+      })
 
-    setIsConfirmModalOpen(false)
-    navigate('/closeout-history')
+      setIsConfirmModalOpen(false)
+      navigate('/closeout-history')
+    } catch (error) {
+      console.error('Submit closeout failed.', error)
+      setSyncErrorToast('Could not submit closeout. Check Supabase setup and try again.')
+    }
   }
 
   return (
@@ -382,6 +405,12 @@ export const NewCloseoutPage = () => {
           </div>
         </div>
       </Modal>
+
+      {syncErrorToast && (
+        <div className="fixed bottom-5 right-6 z-[60] rounded-lg bg-red-700 px-3 py-2 text-xs font-medium text-white shadow-lg shadow-red-700/35">
+          {syncErrorToast}
+        </div>
+      )}
     </>
   )
 }

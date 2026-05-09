@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Check, Mail, Pencil, Save } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useCloseoutContext } from '../app/CloseoutContext'
@@ -46,6 +46,7 @@ export const CloseoutDetailPage = () => {
   const [isSubmitConfirmOpen, setIsSubmitConfirmOpen] = useState(false)
   const [editReason, setEditReason] = useState('')
   const [errors, setErrors] = useState<FormErrors>({})
+  const [syncErrorToast, setSyncErrorToast] = useState('')
   const [headerData, setHeaderData] = useState<CloseoutHeaderData>(record?.headerData ?? {
     businessDate: '',
     shift: 'Lunch',
@@ -71,6 +72,17 @@ export const CloseoutDetailPage = () => {
     () => calculatePettyCashSummary(pettyCashData, serverTotals.serverFinalPay),
     [pettyCashData, serverTotals.serverFinalPay],
   )
+
+  const showSyncError = (message: string, error: unknown) => {
+    console.error(message, error)
+    setSyncErrorToast('Could not save to Supabase. Please try again.')
+  }
+
+  useEffect(() => {
+    if (!syncErrorToast) return
+    const timeoutId = window.setTimeout(() => setSyncErrorToast(''), 3000)
+    return () => window.clearTimeout(timeoutId)
+  }, [syncErrorToast])
 
   if (!record) {
     return (
@@ -146,17 +158,21 @@ export const CloseoutDetailPage = () => {
       return
     }
 
-    await saveCloseoutEdit(record.id, {
-      headerData,
-      serverRows,
-      pettyCashData,
-      status: record.status,
-      reason: editReason,
-    })
+    try {
+      await saveCloseoutEdit(record.id, {
+        headerData,
+        serverRows,
+        pettyCashData,
+        status: record.status,
+        reason: editReason,
+      })
 
-    setIsEditing(false)
-    setErrors({})
-    setEditReason('')
+      setIsEditing(false)
+      setErrors({})
+      setEditReason('')
+    } catch (error) {
+      showSyncError('Failed to save submitted closeout edits.', error)
+    }
   }
 
   const saveDraftEdits = async () => {
@@ -166,18 +182,22 @@ export const CloseoutDetailPage = () => {
       return
     }
 
-    await saveCloseoutEdit(record.id, {
-      headerData,
-      serverRows,
-      pettyCashData,
-      status: 'Draft',
-      reason: editReason,
-    })
+    try {
+      await saveCloseoutEdit(record.id, {
+        headerData,
+        serverRows,
+        pettyCashData,
+        status: 'Draft',
+        reason: editReason,
+      })
 
-    setIsEditing(false)
-    setErrors({})
-    setEditReason('')
-    navigate('/closeout-history')
+      setIsEditing(false)
+      setErrors({})
+      setEditReason('')
+      navigate('/closeout-history')
+    } catch (error) {
+      showSyncError('Failed to save draft edits.', error)
+    }
   }
 
   const requestDraftSubmit = () => {
@@ -192,17 +212,21 @@ export const CloseoutDetailPage = () => {
   }
 
   const confirmDraftSubmit = async () => {
-    await saveCloseoutEdit(record.id, {
-      headerData,
-      serverRows,
-      pettyCashData,
-      status: 'Submitted',
-      reason: editReason,
-    })
+    try {
+      await saveCloseoutEdit(record.id, {
+        headerData,
+        serverRows,
+        pettyCashData,
+        status: 'Submitted',
+        reason: editReason,
+      })
 
-    setIsSubmitConfirmOpen(false)
-    setIsEditing(false)
-    navigate('/closeout-history')
+      setIsSubmitConfirmOpen(false)
+      setIsEditing(false)
+      navigate('/closeout-history')
+    } catch (error) {
+      showSyncError('Failed to submit draft closeout.', error)
+    }
   }
 
   return (
@@ -398,6 +422,12 @@ export const CloseoutDetailPage = () => {
           </div>
         </div>
       </Modal>
+
+      {syncErrorToast && (
+        <div className="fixed bottom-5 right-6 z-[60] rounded-lg bg-red-700 px-3 py-2 text-xs font-medium text-white shadow-lg shadow-red-700/35">
+          {syncErrorToast}
+        </div>
+      )}
     </>
   )
 }
