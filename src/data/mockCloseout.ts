@@ -51,10 +51,10 @@ export const initialHeaderData: CloseoutHeaderData = {
 }
 
 export const initialPettyCashData: PettyCashData = {
-  cashOnHand: 640,
-  receipts: 182.25,
-  bankWithdrawal: 400,
-  actualPhysicalCash: 1506,
+  cashOnHand: 0,
+  receipts: 0,
+  bankWithdrawal: 0,
+  actualPhysicalCash: 0,
   comments: '',
 }
 

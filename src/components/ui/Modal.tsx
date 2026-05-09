@@ -13,8 +13,18 @@ export const Modal = ({ isOpen, title, onClose, children, footer }: ModalProps) 
   useEffect(() => {
     if (!isOpen) return
 
-    const previousOverflow = document.body.style.overflow
+    const scrollY = window.scrollY
+    const previousBodyOverflow = document.body.style.overflow
+    const previousBodyPosition = document.body.style.position
+    const previousBodyTop = document.body.style.top
+    const previousBodyWidth = document.body.style.width
+    const previousHtmlOverflow = document.documentElement.style.overflow
+
+    document.documentElement.style.overflow = 'hidden'
     document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.width = '100%'
 
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -24,7 +34,12 @@ export const Modal = ({ isOpen, title, onClose, children, footer }: ModalProps) 
 
     window.addEventListener('keydown', onEscape)
     return () => {
-      document.body.style.overflow = previousOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
+      document.body.style.overflow = previousBodyOverflow
+      document.body.style.position = previousBodyPosition
+      document.body.style.top = previousBodyTop
+      document.body.style.width = previousBodyWidth
+      window.scrollTo(0, scrollY)
       window.removeEventListener('keydown', onEscape)
     }
   }, [isOpen, onClose])
@@ -32,8 +47,8 @@ export const Modal = ({ isOpen, title, onClose, children, footer }: ModalProps) 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[80] grid place-items-center overflow-y-auto bg-slate-950/40 p-4 backdrop-blur-sm">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
           <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
           <button

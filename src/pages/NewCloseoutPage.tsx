@@ -44,9 +44,24 @@ const getLatestSameShiftCloseout = (
   return sameShift[0]
 }
 
+const getLatestCloseoutForCashOnHand = (
+  records: ReturnType<typeof useCloseoutContext>['closeoutHistory'],
+) => {
+  const submittedRecords = records.filter((record) => record.status === 'Submitted')
+  const source = submittedRecords.length > 0 ? submittedRecords : records
+  if (source.length === 0) return undefined
+
+  const sorted = [...source].sort(
+    (a, b) => getSortTimestamp(b.createdAt, b.submittedAt) - getSortTimestamp(a.createdAt, a.submittedAt),
+  )
+  return sorted[0]
+}
+
 const buildInitialState = (closeoutHistory: ReturnType<typeof useCloseoutContext>['closeoutHistory']) => {
   const shift = getCurrentShiftFromLocalTime()
   const latestSameShift = getLatestSameShiftCloseout(shift, closeoutHistory)
+  const latestForCashOnHand = getLatestCloseoutForCashOnHand(closeoutHistory)
+  const previousFinalCash = latestForCashOnHand?.pettyCashData.actualPhysicalCash ?? 0
 
   return {
     headerData: {
@@ -55,7 +70,14 @@ const buildInitialState = (closeoutHistory: ReturnType<typeof useCloseoutContext
       shift,
     },
     serverRows: buildInitialRowsForShift(shift, getPrefillServerIdsFromCloseout(latestSameShift)),
-    pettyCashData: { ...initialPettyCashData },
+    pettyCashData: {
+      ...initialPettyCashData,
+      cashOnHand: previousFinalCash,
+      receipts: 0,
+      bankWithdrawal: 0,
+      actualPhysicalCash: 0,
+      comments: '',
+    },
   }
 }
 
