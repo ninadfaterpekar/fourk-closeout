@@ -48,7 +48,7 @@ export const Modal = ({ isOpen, title, onClose, children, footer }: ModalProps) 
 
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center overflow-y-auto bg-slate-950/40 p-4 backdrop-blur-sm">
-      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className="translate-y-[200px] max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
           <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
           <button
