@@ -121,7 +121,14 @@ const serializeDraft = (
 
 export const NewCloseoutPage = () => {
   const navigate = useNavigate()
-  const { closeoutHistory, serverOptions, createCloseout, saveDraft, registerDraftAutosaveHandler } = useCloseoutContext()
+  const {
+    activeRestaurantId,
+    closeoutHistory,
+    serverOptions,
+    createCloseout,
+    saveDraft,
+    registerDraftAutosaveHandler,
+  } = useCloseoutContext()
 
   const initialState = useMemo(() => buildInitialState(closeoutHistory), [closeoutHistory])
 
@@ -247,13 +254,18 @@ export const NewCloseoutPage = () => {
 
     const loadRecipients = async () => {
       try {
-        const recipients = await listActiveEmailRecipientsFromSupabase()
+        if (!activeRestaurantId) {
+          setRecipientEmails([])
+          return
+        }
+
+        const recipients = await listActiveEmailRecipientsFromSupabase(activeRestaurantId)
         if (!isMounted) return
         const emails = recipients ?? []
         console.log('Loaded active email recipients', emails)
         setRecipientEmails(emails)
       } catch (error) {
-        console.error('Failed to load active email recipients.', error)
+        console.error(`Failed to load active email recipients for restaurant ${activeRestaurantId}.`, error)
         if (!isMounted) return
         setRecipientEmails([])
       }
@@ -263,7 +275,7 @@ export const NewCloseoutPage = () => {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [activeRestaurantId])
 
   useEffect(() => {
     registerDraftAutosaveHandler(async () => {
@@ -325,7 +337,9 @@ export const NewCloseoutPage = () => {
 
   const submitCloseout = () => {
     if (isSupabaseConfigured && recipientEmails.length === 0) {
-      setSyncErrorToast('No active recipients configured.')
+      setSyncErrorToast(
+        `No active recipients configured for restaurant ${activeRestaurantId ?? 'unknown'}.`,
+      )
       return
     }
 
@@ -345,7 +359,9 @@ export const NewCloseoutPage = () => {
     try {
       if (isSupabaseConfigured && recipientEmails.length === 0) {
         setIsConfirmModalOpen(false)
-        setSyncErrorToast('No active recipients configured.')
+        setSyncErrorToast(
+          `No active recipients configured for restaurant ${activeRestaurantId ?? 'unknown'}.`,
+        )
         return
       }
 

@@ -1,5 +1,5 @@
 import { isSupabaseConfigured, supabase } from './supabase'
-import { DEFAULT_RESTAURANT_ID } from './supabaseStore'
+import { resolveActiveRestaurantIdFromSupabase } from './supabaseStore'
 
 const HEALTHCHECK_SERVER_ID = 'ffffffff-ffff-ffff-ffff-ffffffffffff'
 
@@ -35,12 +35,19 @@ export const runSupabaseHealthCheck = async () => {
       `[Supabase Health] closeouts table query succeeded (sample rows: ${data?.length ?? 0}).`,
     )
 
+    const restaurantId = await resolveActiveRestaurantIdFromSupabase()
+    if (!restaurantId) {
+      console.warn('[Supabase Health] No active restaurant found. Skipping write probe.')
+      return
+    }
+    console.info(`[Supabase Health] Loaded active restaurant id: ${restaurantId}`)
+
     const { error: writeProbeError } = await supabase
       .from('servers')
       .upsert(
         {
           id: HEALTHCHECK_SERVER_ID,
-          restaurant_id: DEFAULT_RESTAURANT_ID,
+          restaurant_id: restaurantId,
           name: 'Health Check Server',
           is_active: false,
           updated_at: new Date().toISOString(),

@@ -128,7 +128,10 @@ Deno.serve(async (request) => {
     )
   }
 
-  const payload = (await request.json().catch(() => null)) as { closeoutId?: string } | null
+  const payload = (await request.json().catch(() => null)) as {
+    closeoutId?: string
+    restaurantId?: string
+  } | null
   const closeoutId = payload?.closeoutId?.trim()
   if (!closeoutId) {
     return jsonResponse({ success: false, message: 'closeoutId is required.' }, 400)
@@ -159,12 +162,15 @@ Deno.serve(async (request) => {
     })
   }
 
+  const recipientRestaurantId = payload?.restaurantId?.trim() || closeout.restaurant_id
+  console.log('Loaded active restaurant id', recipientRestaurantId)
+
   const [{ data: recipients, error: recipientsError }, { data: pettyCash }, { data: payouts, error: payoutsError }] =
     await Promise.all([
       adminClient
         .from('email_recipients')
         .select('email')
-        .eq('restaurant_id', closeout.restaurant_id)
+        .eq('restaurant_id', recipientRestaurantId)
         .eq('is_active', true)
         .order('email', { ascending: true }),
       adminClient
@@ -183,17 +189,25 @@ Deno.serve(async (request) => {
     ])
 
   if (recipientsError) {
+    console.error('Failed to load active email recipients.', recipientsError)
     return jsonResponse({ success: false, message: recipientsError.message }, 500)
   }
 
   if (payoutsError) {
+    console.error('Failed to load server payouts.', payoutsError)
     return jsonResponse({ success: false, message: payoutsError.message }, 500)
   }
 
   const toEmails = (recipients ?? []).map((row) => row.email).filter(Boolean)
   console.log('Loaded active email recipients', toEmails)
   if (toEmails.length === 0) {
-    return jsonResponse({ success: false, message: 'No active email recipients configured.' }, 400)
+    return jsonResponse(
+      {
+        success: false,
+        message: `No active email recipients configured for restaurant ${recipientRestaurantId}.`,
+      },
+      400,
+    )
   }
 
   const serverRows = payouts ?? []

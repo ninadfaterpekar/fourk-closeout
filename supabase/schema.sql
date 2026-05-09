@@ -105,32 +105,32 @@ create policy restaurants_dev_access
 on restaurants
 for all
 to anon, authenticated
-using (id = '00000000-0000-0000-0000-000000000001'::uuid)
-with check (id = '00000000-0000-0000-0000-000000000001'::uuid);
+using (id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid)
+with check (id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid);
 
 drop policy if exists app_users_dev_access on app_users;
 create policy app_users_dev_access
 on app_users
 for all
 to anon, authenticated
-using (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid)
-with check (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid);
+using (restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid)
+with check (restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid);
 
 drop policy if exists servers_dev_access on servers;
 create policy servers_dev_access
 on servers
 for all
 to anon, authenticated
-using (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid)
-with check (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid);
+using (restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid)
+with check (restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid);
 
 drop policy if exists closeouts_dev_access on closeouts;
 create policy closeouts_dev_access
 on closeouts
 for all
 to anon, authenticated
-using (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid)
-with check (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid);
+using (restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid)
+with check (restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid);
 
 drop policy if exists server_payouts_dev_access on server_payouts;
 create policy server_payouts_dev_access
@@ -142,7 +142,7 @@ using (
     select 1
     from closeouts c
     where c.id = server_payouts.closeout_id
-      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+      and c.restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid
   )
 )
 with check (
@@ -150,7 +150,7 @@ with check (
     select 1
     from closeouts c
     where c.id = server_payouts.closeout_id
-      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+      and c.restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid
   )
 );
 
@@ -164,7 +164,7 @@ using (
     select 1
     from closeouts c
     where c.id = petty_cash_records.closeout_id
-      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+      and c.restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid
   )
 )
 with check (
@@ -172,7 +172,7 @@ with check (
     select 1
     from closeouts c
     where c.id = petty_cash_records.closeout_id
-      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+      and c.restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid
   )
 );
 
@@ -186,7 +186,7 @@ using (
     select 1
     from closeouts c
     where c.id = closeout_edit_history.closeout_id
-      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+      and c.restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid
   )
 )
 with check (
@@ -194,7 +194,7 @@ with check (
     select 1
     from closeouts c
     where c.id = closeout_edit_history.closeout_id
-      and c.restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid
+      and c.restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid
   )
 );
 
@@ -203,5 +203,5 @@ create policy email_recipients_dev_access
 on email_recipients
 for all
 to anon, authenticated
-using (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid)
-with check (restaurant_id = '00000000-0000-0000-0000-000000000001'::uuid);
+using (restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid)
+with check (restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid);

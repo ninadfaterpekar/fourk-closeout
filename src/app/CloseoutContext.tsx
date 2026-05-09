@@ -16,6 +16,7 @@ import {
   listActiveEmailRecipientsFromSupabase,
   listCloseoutsFromSupabase,
   listServersFromSupabase,
+  resolveActiveRestaurantIdFromSupabase,
   sendCloseoutEmailFromSupabase,
   updateServerInSupabase,
   upsertCloseoutToSupabase,
@@ -35,6 +36,7 @@ type SubmissionResult = {
 }
 
 type CloseoutContextValue = {
+  activeRestaurantId: string | null
   serverOptions: ServerOption[]
   addServerOption: (name: string) => Promise<void>
   updateServerOption: (id: string, name: string) => Promise<void>
@@ -67,6 +69,7 @@ const buildRecord = (id: string, payload: NewCloseoutPayload, createdAt: string)
 })
 
 export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
+  const [activeRestaurantId, setActiveRestaurantId] = useState<string | null>(null)
   const [serverOptions, setServerOptions] = useState<ServerOption[]>(
     isSupabaseConfigured ? [] : initialServerOptions,
   )
@@ -75,8 +78,8 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
   )
   const draftAutosaveHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
 
-  const refreshServersFromSupabase = useCallback(async () => {
-    const remoteServers = await listServersFromSupabase()
+  const refreshServersFromSupabase = useCallback(async (restaurantId: string) => {
+    const remoteServers = await listServersFromSupabase(restaurantId)
     if (remoteServers) {
       setServerOptions(remoteServers)
     }
@@ -89,9 +92,20 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
 
     const loadRemoteData = async () => {
       try {
+        const restaurantId = await resolveActiveRestaurantIdFromSupabase()
+        console.log('Loaded active restaurant id', restaurantId)
+
+        if (!restaurantId) {
+          console.error('No restaurants found in Supabase.')
+          return
+        }
+
+        if (!isMounted) return
+        setActiveRestaurantId(restaurantId)
+
         const [remoteServers, remoteCloseouts] = await Promise.all([
-          listServersFromSupabase(),
-          listCloseoutsFromSupabase(),
+          listServersFromSupabase(restaurantId),
+          listCloseoutsFromSupabase(restaurantId),
         ])
 
         if (!isMounted) return
@@ -103,7 +117,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    loadRemoteData()
+    void loadRemoteData()
 
     return () => {
       isMounted = false
@@ -117,14 +131,18 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       return
     }
 
+    if (!activeRestaurantId) {
+      throw new Error('Missing active restaurant id for server create.')
+    }
+
     try {
-      await createServerInSupabase(name)
-      await refreshServersFromSupabase()
+      await createServerInSupabase(name, activeRestaurantId)
+      await refreshServersFromSupabase(activeRestaurantId)
     } catch (error) {
       console.error('Supabase server create failed.', error)
       throw error
     }
-  }, [refreshServersFromSupabase])
+  }, [activeRestaurantId, refreshServersFromSupabase])
 
   const updateServerOption = useCallback(async (id: string, name: string) => {
     if (!isSupabaseConfigured) {
@@ -132,14 +150,18 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       return
     }
 
+    if (!activeRestaurantId) {
+      throw new Error('Missing active restaurant id for server update.')
+    }
+
     try {
       await updateServerInSupabase(id, name)
-      await refreshServersFromSupabase()
+      await refreshServersFromSupabase(activeRestaurantId)
     } catch (error) {
       console.error('Supabase server update failed.', error)
       throw error
     }
-  }, [refreshServersFromSupabase])
+  }, [activeRestaurantId, refreshServersFromSupabase])
 
   const deleteServerOption = useCallback(async (id: string) => {
     if (!isSupabaseConfigured) {
@@ -147,14 +169,18 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       return
     }
 
+    if (!activeRestaurantId) {
+      throw new Error('Missing active restaurant id for server delete.')
+    }
+
     try {
       await deactivateServerInSupabase(id)
-      await refreshServersFromSupabase()
+      await refreshServersFromSupabase(activeRestaurantId)
     } catch (error) {
       console.error('Supabase server delete failed.', error)
       throw error
     }
-  }, [refreshServersFromSupabase])
+  }, [activeRestaurantId, refreshServersFromSupabase])
 
   const createCloseout = useCallback(async (payload: NewCloseoutPayload) => {
     const timestamp = new Date().toISOString()
@@ -164,15 +190,22 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (payload.status === 'Submitted' && isSupabaseConfigured) {
-      const recipients = await listActiveEmailRecipientsFromSupabase()
+      if (!activeRestaurantId) {
+        throw new Error('Missing active restaurant id for closeout submission.')
+      }
+
+      const recipients = await listActiveEmailRecipientsFromSupabase(activeRestaurantId)
       console.log('Loaded active email recipients', recipients ?? [])
       if (!recipients || recipients.length === 0) {
-        throw new Error('No active recipients configured.')
+        throw new Error(`No active recipients configured for restaurant ${activeRestaurantId}.`)
       }
     }
 
     if (isSupabaseConfigured) {
-      await upsertCloseoutToSupabase(nextRecord)
+      if (!activeRestaurantId) {
+        throw new Error('Missing active restaurant id for closeout save.')
+      }
+      await upsertCloseoutToSupabase(nextRecord, activeRestaurantId)
     }
 
     setCloseoutHistory((prev) => [nextRecord, ...prev])
@@ -180,7 +213,10 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     let emailStatus: CloseoutEmailStatus = 'skipped'
     if (payload.status === 'Submitted' && isSupabaseConfigured) {
       try {
-        emailStatus = await sendCloseoutEmailFromSupabase(nextRecord.id)
+        if (!activeRestaurantId) {
+          throw new Error('Missing active restaurant id for closeout email.')
+        }
+        emailStatus = await sendCloseoutEmailFromSupabase(nextRecord.id, activeRestaurantId)
       } catch (error) {
         console.error('Failed to send closeout email.', error)
         emailStatus = 'failed'
@@ -188,7 +224,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     }
 
     return { record: nextRecord, emailStatus }
-  }, [])
+  }, [activeRestaurantId])
 
   const saveDraft = useCallback(async (payload: NewCloseoutPayload, existingDraftId?: string) => {
     const timestamp = new Date().toISOString()
@@ -214,7 +250,10 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (isSupabaseConfigured) {
-      await upsertCloseoutToSupabase(finalRecord)
+      if (!activeRestaurantId) {
+        throw new Error('Missing active restaurant id for draft save.')
+      }
+      await upsertCloseoutToSupabase(finalRecord, activeRestaurantId)
     }
 
     setCloseoutHistory((prev) => {
@@ -224,7 +263,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     })
 
     return finalRecord
-  }, [closeoutHistory])
+  }, [activeRestaurantId, closeoutHistory])
 
   const saveCloseoutEdit = useCallback(async (id: string, payload: EditCloseoutPayload) => {
     const timestamp = new Date().toISOString()
@@ -249,15 +288,22 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (payload.status === 'Submitted' && isSupabaseConfigured) {
-      const recipients = await listActiveEmailRecipientsFromSupabase()
+      if (!activeRestaurantId) {
+        throw new Error('Missing active restaurant id for closeout submission.')
+      }
+
+      const recipients = await listActiveEmailRecipientsFromSupabase(activeRestaurantId)
       console.log('Loaded active email recipients', recipients ?? [])
       if (!recipients || recipients.length === 0) {
-        throw new Error('No active recipients configured.')
+        throw new Error(`No active recipients configured for restaurant ${activeRestaurantId}.`)
       }
     }
 
     if (isSupabaseConfigured) {
-      await upsertCloseoutToSupabase(editedRecord, payload.reason)
+      if (!activeRestaurantId) {
+        throw new Error('Missing active restaurant id for closeout edit save.')
+      }
+      await upsertCloseoutToSupabase(editedRecord, activeRestaurantId, payload.reason)
     }
 
     setCloseoutHistory((prev) =>
@@ -270,7 +316,10 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
 
     if (becameSubmitted && isSupabaseConfigured) {
       try {
-        emailStatus = await sendCloseoutEmailFromSupabase(editedRecord.id)
+        if (!activeRestaurantId) {
+          throw new Error('Missing active restaurant id for closeout email.')
+        }
+        emailStatus = await sendCloseoutEmailFromSupabase(editedRecord.id, activeRestaurantId)
       } catch (error) {
         console.error('Failed to send closeout email.', error)
         emailStatus = 'failed'
@@ -278,7 +327,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     }
 
     return { record: editedRecord, emailStatus }
-  }, [closeoutHistory])
+  }, [activeRestaurantId, closeoutHistory])
 
   const registerDraftAutosaveHandler = useCallback((handler: (() => Promise<boolean>) | null) => {
     draftAutosaveHandlerRef.current = handler
@@ -291,6 +340,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
 
   const value = useMemo(
     () => ({
+      activeRestaurantId,
       serverOptions,
       addServerOption,
       updateServerOption,
@@ -303,6 +353,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       triggerDraftAutosave,
     }),
     [
+      activeRestaurantId,
       serverOptions,
       addServerOption,
       updateServerOption,

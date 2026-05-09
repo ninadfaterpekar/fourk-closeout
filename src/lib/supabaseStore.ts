@@ -6,8 +6,6 @@ import type {
 } from '../types/closeout'
 import { supabase } from './supabase'
 
-export const DEFAULT_RESTAURANT_ID = '00000000-0000-0000-0000-000000000001'
-
 const parseNumber = (value: number | string | null | undefined) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
@@ -22,6 +20,27 @@ const throwIfError = (error: { message: string } | null) => {
 const ensureSupabase = () => {
   if (!supabase) return null
   return supabase
+}
+
+export const resolveActiveRestaurantIdFromSupabase = async (): Promise<string | null> => {
+  const client = ensureSupabase()
+  if (!client) return null
+
+  const { data, error } = await client
+    .from('restaurants')
+    .select('id, created_at')
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('Failed to load restaurants.', error)
+    throw new Error(error.message)
+  }
+
+  if (!data || data.length === 0) return null
+  if (data.length === 1) return data[0].id
+
+  console.warn('Multiple restaurants found. Defaulting to the first by created_at.', data.map((row) => row.id))
+  return data[0].id
 }
 
 const rowToServerPayout = (row: {
@@ -44,14 +63,16 @@ const rowToServerPayout = (row: {
   runner: parseNumber(row.runner),
 })
 
-export const listServersFromSupabase = async (): Promise<ServerOption[] | null> => {
+export const listServersFromSupabase = async (
+  restaurantId: string,
+): Promise<ServerOption[] | null> => {
   const client = ensureSupabase()
   if (!client) return null
 
   const { data, error } = await client
     .from('servers')
     .select('id, name')
-    .eq('restaurant_id', DEFAULT_RESTAURANT_ID)
+    .eq('restaurant_id', restaurantId)
     .eq('is_active', true)
     .order('name', { ascending: true })
 
@@ -61,7 +82,7 @@ export const listServersFromSupabase = async (): Promise<ServerOption[] | null> 
 }
 
 export const listActiveEmailRecipientsFromSupabase = async (
-  restaurantId = DEFAULT_RESTAURANT_ID,
+  restaurantId: string,
 ): Promise<string[] | null> => {
   const client = ensureSupabase()
   if (!client) return null
@@ -73,21 +94,27 @@ export const listActiveEmailRecipientsFromSupabase = async (
     .eq('is_active', true)
     .order('email', { ascending: true })
 
-  throwIfError(error)
+  if (error) {
+    console.error(`Failed to load email recipients for restaurant ${restaurantId}.`, error)
+    throw new Error(error.message)
+  }
 
   return (data ?? [])
     .map((row) => row.email)
     .filter((email): email is string => Boolean(email))
 }
 
-export const createServerInSupabase = async (name: string): Promise<ServerOption | null> => {
+export const createServerInSupabase = async (
+  name: string,
+  restaurantId: string,
+): Promise<ServerOption | null> => {
   const client = ensureSupabase()
   if (!client) return null
 
   const { data, error } = await client
     .from('servers')
     .insert({
-      restaurant_id: DEFAULT_RESTAURANT_ID,
+      restaurant_id: restaurantId,
       name,
       is_active: true,
     })
@@ -123,7 +150,9 @@ export const deactivateServerInSupabase = async (id: string): Promise<void> => {
   throwIfError(error)
 }
 
-export const listCloseoutsFromSupabase = async (): Promise<CloseoutRecord[] | null> => {
+export const listCloseoutsFromSupabase = async (
+  restaurantId: string,
+): Promise<CloseoutRecord[] | null> => {
   const client = ensureSupabase()
   if (!client) return null
 
@@ -132,7 +161,7 @@ export const listCloseoutsFromSupabase = async (): Promise<CloseoutRecord[] | nu
     .select(
       'id, business_date, shift, manager_name, backroom_party, status, created_at, submitted_at',
     )
-    .eq('restaurant_id', DEFAULT_RESTAURANT_ID)
+    .eq('restaurant_id', restaurantId)
     .order('business_date', { ascending: false })
     .order('submitted_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
@@ -221,6 +250,7 @@ export const listCloseoutsFromSupabase = async (): Promise<CloseoutRecord[] | nu
 
 export const upsertCloseoutToSupabase = async (
   record: CloseoutRecord,
+  restaurantId: string,
   editReason?: string,
 ): Promise<void> => {
   const client = ensureSupabase()
@@ -231,7 +261,7 @@ export const upsertCloseoutToSupabase = async (
     .upsert(
       {
         id: record.id,
-        restaurant_id: DEFAULT_RESTAURANT_ID,
+        restaurant_id: restaurantId,
         business_date: record.headerData.businessDate,
         shift: record.headerData.shift,
         manager_name: record.headerData.managerName,
@@ -304,13 +334,14 @@ export const upsertCloseoutToSupabase = async (
 
 export const sendCloseoutEmailFromSupabase = async (
   closeoutId: string,
+  restaurantId: string,
 ): Promise<CloseoutEmailStatus> => {
   const client = ensureSupabase()
   if (!client) return 'skipped'
 
   console.log('Calling send-closeout-email')
   const { data, error } = await client.functions.invoke('send-closeout-email', {
-    body: { closeoutId },
+    body: { closeoutId, restaurantId },
   })
   console.log('send-closeout-email response', { data, error })
 
