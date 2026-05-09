@@ -288,11 +288,14 @@ export const sendCloseoutEmailFromSupabase = async (
   const client = ensureSupabase()
   if (!client) return 'skipped'
 
+  console.log('Calling send-closeout-email')
   const { data, error } = await client.functions.invoke('send-closeout-email', {
     body: { closeoutId },
   })
+  console.log('send-closeout-email response', { data, error })
 
   if (error) {
+    console.error('send-closeout-email failed.', error)
     throw new Error(error.message)
   }
 
