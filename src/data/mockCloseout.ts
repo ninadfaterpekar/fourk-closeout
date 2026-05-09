@@ -46,7 +46,7 @@ const makeCustomRow = (
 export const initialHeaderData: CloseoutHeaderData = {
   businessDate: getIsoDateToday(),
   shift: getCurrentShiftFromLocalTime(),
-  managerName: 'Avery Lopez',
+  managerName: 'Sarah',
   backroomParty: 'No',
 }
 
@@ -77,7 +77,7 @@ export const initialCloseoutHistory: CloseoutRecord[] = [
     headerData: {
       businessDate: '2026-05-07',
       shift: 'Dinner',
-      managerName: 'Avery Lopez',
+      managerName: 'Jocelyn',
       backroomParty: 'No',
     },
     serverRows: [
@@ -103,7 +103,7 @@ export const initialCloseoutHistory: CloseoutRecord[] = [
     headerData: {
       businessDate: '2026-05-07',
       shift: 'Lunch',
-      managerName: 'Renee Olsen',
+      managerName: 'Ninad',
       backroomParty: 'Yes',
     },
     serverRows: [
@@ -130,7 +130,7 @@ export const initialCloseoutHistory: CloseoutRecord[] = [
     headerData: {
       businessDate: '2026-05-06',
       shift: 'Dinner',
-      managerName: 'Avery Lopez',
+      managerName: 'Sandeep',
       backroomParty: 'No',
     },
     serverRows: [

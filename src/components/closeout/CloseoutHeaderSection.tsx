@@ -2,6 +2,8 @@ import type { CloseoutHeaderData, ShiftType } from '../../types/closeout'
 import { formatDisplayDate, getDayOfWeek } from '../../utils/date'
 import { Card } from '../ui/Card'
 
+const MANAGER_OPTIONS = ['Sarah', 'Jocelyn', 'Ninad', 'Sandeep'] as const
+
 type CloseoutHeaderSectionProps = {
   value: CloseoutHeaderData
   onChange: (value: CloseoutHeaderData) => void
@@ -47,13 +49,21 @@ export const CloseoutHeaderSection = ({ value, onChange }: CloseoutHeaderSection
 
         <label className="space-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Manager on Duty</span>
-          <input
-            type="text"
+          <select
             value={value.managerName}
             onChange={(event) => updateHeader('managerName', event.target.value)}
-            placeholder="Manager name"
             className="h-9 w-full rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
-          />
+          >
+            <option value="">Select manager</option>
+            {MANAGER_OPTIONS.map((manager) => (
+              <option key={manager} value={manager}>
+                {manager}
+              </option>
+            ))}
+            {value.managerName && !MANAGER_OPTIONS.includes(value.managerName as (typeof MANAGER_OPTIONS)[number]) && (
+              <option value={value.managerName}>{value.managerName}</option>
+            )}
+          </select>
         </label>
 
         <label className="space-y-1">

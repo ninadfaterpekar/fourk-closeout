@@ -13,6 +13,9 @@ export const Modal = ({ isOpen, title, onClose, children, footer }: ModalProps) 
   useEffect(() => {
     if (!isOpen) return
 
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose()
@@ -20,7 +23,10 @@ export const Modal = ({ isOpen, title, onClose, children, footer }: ModalProps) 
     }
 
     window.addEventListener('keydown', onEscape)
-    return () => window.removeEventListener('keydown', onEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onEscape)
+    }
   }, [isOpen, onClose])
 
   if (!isOpen) return null
