@@ -165,7 +165,8 @@ Deno.serve(async (request) => {
         .from('email_recipients')
         .select('email')
         .eq('restaurant_id', closeout.restaurant_id)
-        .eq('is_active', true),
+        .eq('is_active', true)
+        .order('email', { ascending: true }),
       adminClient
         .from('petty_cash_records')
         .select('cash_on_hand, receipts, bank_withdrawal, actual_physical_cash, comments')
@@ -190,6 +191,7 @@ Deno.serve(async (request) => {
   }
 
   const toEmails = (recipients ?? []).map((row) => row.email).filter(Boolean)
+  console.log('Loaded active email recipients', toEmails)
   if (toEmails.length === 0) {
     return jsonResponse({ success: false, message: 'No active email recipients configured.' }, 400)
   }

@@ -13,6 +13,7 @@ import { initialCloseoutHistory, initialServerOptions } from '../data/mockCloseo
 import {
   createServerInSupabase,
   deactivateServerInSupabase,
+  listActiveEmailRecipientsFromSupabase,
   listCloseoutsFromSupabase,
   listServersFromSupabase,
   sendCloseoutEmailFromSupabase,
@@ -162,6 +163,14 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       nextRecord.submittedAt = timestamp
     }
 
+    if (payload.status === 'Submitted' && isSupabaseConfigured) {
+      const recipients = await listActiveEmailRecipientsFromSupabase()
+      console.log('Loaded active email recipients', recipients ?? [])
+      if (!recipients || recipients.length === 0) {
+        throw new Error('No active recipients configured.')
+      }
+    }
+
     if (isSupabaseConfigured) {
       await upsertCloseoutToSupabase(nextRecord)
     }
@@ -237,6 +246,14 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
         },
         ...existingRecord.editHistory,
       ],
+    }
+
+    if (payload.status === 'Submitted' && isSupabaseConfigured) {
+      const recipients = await listActiveEmailRecipientsFromSupabase()
+      console.log('Loaded active email recipients', recipients ?? [])
+      if (!recipients || recipients.length === 0) {
+        throw new Error('No active recipients configured.')
+      }
     }
 
     if (isSupabaseConfigured) {

@@ -23,5 +23,5 @@ on conflict (id) do update set
 
 insert into email_recipients (restaurant_id, email, display_name, is_active)
 values
-  ('00000000-0000-0000-0000-000000000001', 'closeouts@fourk-ops.local', 'Closeout Ops', true)
+  ('00000000-0000-0000-0000-000000000001', 'ops@fourk.local', 'Closeout Ops', true)
 on conflict do nothing;

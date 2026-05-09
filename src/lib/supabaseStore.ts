@@ -60,6 +60,26 @@ export const listServersFromSupabase = async (): Promise<ServerOption[] | null> 
   return (data ?? []).map((row) => ({ id: row.id, name: row.name }))
 }
 
+export const listActiveEmailRecipientsFromSupabase = async (
+  restaurantId = DEFAULT_RESTAURANT_ID,
+): Promise<string[] | null> => {
+  const client = ensureSupabase()
+  if (!client) return null
+
+  const { data, error } = await client
+    .from('email_recipients')
+    .select('email')
+    .eq('restaurant_id', restaurantId)
+    .eq('is_active', true)
+    .order('email', { ascending: true })
+
+  throwIfError(error)
+
+  return (data ?? [])
+    .map((row) => row.email)
+    .filter((email): email is string => Boolean(email))
+}
+
 export const createServerInSupabase = async (name: string): Promise<ServerOption | null> => {
   const client = ensureSupabase()
   if (!client) return null

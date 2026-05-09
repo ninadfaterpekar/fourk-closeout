@@ -28,6 +28,8 @@ import {
   normalizeRowsForShift,
 } from '../utils/serverRows'
 import type { CloseoutEmailStatus } from '../types/closeout'
+import { isSupabaseConfigured } from '../lib/supabase'
+import { listActiveEmailRecipientsFromSupabase } from '../lib/supabaseStore'
 
 type FormErrors = Record<string, string>
 type HistoryToastState = {
@@ -130,6 +132,7 @@ export const NewCloseoutPage = () => {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [lastDraftId, setLastDraftId] = useState<string | undefined>()
   const [syncErrorToast, setSyncErrorToast] = useState('')
+  const [recipientEmails, setRecipientEmails] = useState<string[]>([])
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState(
     serializeDraft(initialState.headerData, initialState.serverRows, initialState.pettyCashData),
   )
@@ -238,6 +241,31 @@ export const NewCloseoutPage = () => {
   }, [syncErrorToast])
 
   useEffect(() => {
+    if (!isSupabaseConfigured) return
+
+    let isMounted = true
+
+    const loadRecipients = async () => {
+      try {
+        const recipients = await listActiveEmailRecipientsFromSupabase()
+        if (!isMounted) return
+        const emails = recipients ?? []
+        console.log('Loaded active email recipients', emails)
+        setRecipientEmails(emails)
+      } catch (error) {
+        console.error('Failed to load active email recipients.', error)
+        if (!isMounted) return
+        setRecipientEmails([])
+      }
+    }
+
+    void loadRecipients()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
     registerDraftAutosaveHandler(async () => {
       const hasChanges = currentSnapshot !== lastSavedSnapshot
       if (!hasChanges) return false
@@ -296,6 +324,11 @@ export const NewCloseoutPage = () => {
   }
 
   const submitCloseout = () => {
+    if (isSupabaseConfigured && recipientEmails.length === 0) {
+      setSyncErrorToast('No active recipients configured.')
+      return
+    }
+
     const validationErrors = validateCloseout()
 
     if (Object.keys(validationErrors).length > 0) {
@@ -310,6 +343,12 @@ export const NewCloseoutPage = () => {
 
   const confirmSubmitCloseout = async () => {
     try {
+      if (isSupabaseConfigured && recipientEmails.length === 0) {
+        setIsConfirmModalOpen(false)
+        setSyncErrorToast('No active recipients configured.')
+        return
+      }
+
       const result = await createCloseout({
         headerData,
         serverRows,
@@ -447,7 +486,12 @@ export const NewCloseoutPage = () => {
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
           <h4 className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">Email Preview</h4>
           <div className="mt-2 space-y-1 text-sm text-amber-900">
-            <p><span className="font-semibold">To:</span> closeouts@fourk-ops.local</p>
+            <p>
+              <span className="font-semibold">To:</span>{' '}
+              {recipientEmails.length > 0
+                ? recipientEmails.join(', ')
+                : 'No active recipients configured'}
+            </p>
             <p><span className="font-semibold">Subject:</span> {headerData.shift} Closeout - {formatDisplayDate(headerData.businessDate)}</p>
             <p className="pt-1">
               This email will include the closeout totals, variance details, and comments shown above.
