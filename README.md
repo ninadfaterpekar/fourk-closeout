@@ -41,6 +41,26 @@ npm run lint
 npm run build
 ```
 
+## Closeout Email (Supabase Edge Function + Resend)
+
+Deploy the function:
+
+```bash
+supabase functions deploy send-closeout-email --project-ref <your-project-ref>
+```
+
+Set function secrets (required):
+
+```bash
+supabase secrets set RESEND_API_KEY=<your-resend-api-key> --project-ref <your-project-ref>
+supabase secrets set RESEND_FROM_EMAIL="Fourk Closeout <onboarding@resend.dev>" --project-ref <your-project-ref>
+```
+
+Notes:
+
+- `RESEND_API_KEY` must only be stored in Supabase function secrets.
+- The browser never receives the Resend key.
+
 ## Folder Structure
 
 ```text

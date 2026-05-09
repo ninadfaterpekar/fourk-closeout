@@ -27,10 +27,35 @@ import {
   hasRowData,
   normalizeRowsForShift,
 } from '../utils/serverRows'
+import type { CloseoutEmailStatus } from '../types/closeout'
 
 type FormErrors = Record<string, string>
+type HistoryToastState = {
+  type: 'success' | 'error'
+  message: string
+}
 
 const isValidMoney = (value: number) => Number.isFinite(value) && value >= 0
+
+const buildHistoryToastFromEmailStatus = (
+  emailStatus: CloseoutEmailStatus,
+): HistoryToastState | undefined => {
+  if (emailStatus === 'sent') {
+    return {
+      type: 'success',
+      message: 'Closeout submitted and email sent.',
+    }
+  }
+
+  if (emailStatus === 'failed') {
+    return {
+      type: 'error',
+      message: 'Closeout submitted, but email failed to send.',
+    }
+  }
+
+  return undefined
+}
 
 const getSortTimestamp = (createdAt: string, submittedAt?: string) =>
   new Date(submittedAt ?? createdAt).getTime()
@@ -285,15 +310,18 @@ export const NewCloseoutPage = () => {
 
   const confirmSubmitCloseout = async () => {
     try {
-      await createCloseout({
+      const result = await createCloseout({
         headerData,
         serverRows,
         pettyCashData,
         status: 'Submitted',
       })
 
+      const historyToast = buildHistoryToastFromEmailStatus(result.emailStatus)
       setIsConfirmModalOpen(false)
-      navigate('/closeout-history')
+      navigate('/closeout-history', {
+        state: historyToast ? { closeoutToast: historyToast } : undefined,
+      })
     } catch (error) {
       console.error('Submit closeout failed.', error)
       setSyncErrorToast('Could not submit closeout. Check Supabase setup and try again.')

@@ -1,6 +1,6 @@
 import { ArrowDownUp, BanknoteArrowDown, CalendarDays, HandCoins, Plus, TrendingUp } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useCloseoutContext } from '../app/CloseoutContext'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -18,16 +18,36 @@ import { toCurrency } from '../utils/currency'
 
 type SortField = 'date' | 'shift'
 type SortDirection = 'asc' | 'desc'
+type HistoryToastState = {
+  type: 'success' | 'error'
+  message: string
+}
 
 const truncateComment = (value: string) => (value.length > 80 ? `${value.slice(0, 80)}...` : value)
 
 export const CloseoutHistoryPage = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { closeoutHistory } = useCloseoutContext()
+  const state = location.state as { closeoutToast?: HistoryToastState } | null
   const [searchTerm, setSearchTerm] = useState('')
   const [sortField, setSortField] = useState<SortField>('date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [weekReferenceDate, setWeekReferenceDate] = useState(getIsoDateToday())
+  const [statusToast, setStatusToast] = useState<HistoryToastState | null>(
+    state?.closeoutToast ?? null,
+  )
+
+  useEffect(() => {
+    if (!state?.closeoutToast) return
+    navigate(location.pathname, { replace: true, state: null })
+  }, [location.pathname, navigate, state?.closeoutToast])
+
+  useEffect(() => {
+    if (!statusToast) return
+    const timeoutId = window.setTimeout(() => setStatusToast(null), 3200)
+    return () => window.clearTimeout(timeoutId)
+  }, [statusToast])
 
   const toggleSort = (field: SortField) => {
     if (field === sortField) {
@@ -241,6 +261,18 @@ export const CloseoutHistoryPage = () => {
           </table>
         </div>
       </Card>
+
+      {statusToast && (
+        <div
+          className={`fixed bottom-5 right-6 z-[60] rounded-lg px-3 py-2 text-xs font-medium text-white shadow-lg ${
+            statusToast.type === 'success'
+              ? 'bg-emerald-700 shadow-emerald-700/35'
+              : 'bg-red-700 shadow-red-700/35'
+          }`}
+        >
+          {statusToast.message}
+        </div>
+      )}
     </div>
   )
 }

@@ -25,14 +25,39 @@ import {
 } from '../utils/serverRows'
 import { formatDateTimeShort, formatDisplayDate, getDayOfWeek } from '../utils/date'
 import { toCurrency } from '../utils/currency'
+import type { CloseoutEmailStatus } from '../types/closeout'
 
 type FormErrors = Record<string, string>
+type HistoryToastState = {
+  type: 'success' | 'error'
+  message: string
+}
 
 const isValidMoney = (value: number) => Number.isFinite(value) && value >= 0
 
 const resolveServerName = (row: ServerPayoutRow, serverLookup: Map<string, string>) => {
   if (row.rowType === 'custom') return row.customName || 'Custom Server'
   return serverLookup.get(row.serverId) ?? 'Unknown Server'
+}
+
+const buildHistoryToastFromEmailStatus = (
+  emailStatus: CloseoutEmailStatus,
+): HistoryToastState | undefined => {
+  if (emailStatus === 'sent') {
+    return {
+      type: 'success',
+      message: 'Closeout submitted and email sent.',
+    }
+  }
+
+  if (emailStatus === 'failed') {
+    return {
+      type: 'error',
+      message: 'Closeout submitted, but email failed to send.',
+    }
+  }
+
+  return undefined
 }
 
 export const CloseoutDetailPage = () => {
@@ -213,7 +238,7 @@ export const CloseoutDetailPage = () => {
 
   const confirmDraftSubmit = async () => {
     try {
-      await saveCloseoutEdit(record.id, {
+      const result = await saveCloseoutEdit(record.id, {
         headerData,
         serverRows,
         pettyCashData,
@@ -221,9 +246,14 @@ export const CloseoutDetailPage = () => {
         reason: editReason,
       })
 
+      const historyToast = result
+        ? buildHistoryToastFromEmailStatus(result.emailStatus)
+        : undefined
       setIsSubmitConfirmOpen(false)
       setIsEditing(false)
-      navigate('/closeout-history')
+      navigate('/closeout-history', {
+        state: historyToast ? { closeoutToast: historyToast } : undefined,
+      })
     } catch (error) {
       showSyncError('Failed to submit draft closeout.', error)
     }

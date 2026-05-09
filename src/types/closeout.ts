@@ -5,6 +5,7 @@ export type ServerRowType = 'standard' | 'custom'
 export type CloseoutStatus = 'Draft' | 'Submitted'
 
 export type BackroomPartyType = 'Yes' | 'No'
+export type CloseoutEmailStatus = 'sent' | 'failed' | 'skipped'
 
 export type ServerOption = {
   id: string

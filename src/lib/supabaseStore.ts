@@ -1,4 +1,5 @@
 import type {
+  CloseoutEmailStatus,
   CloseoutRecord,
   ServerOption,
   ServerPayoutRow,
@@ -279,4 +280,34 @@ export const upsertCloseoutToSupabase = async (
 
     throwIfError(editError)
   }
+}
+
+export const sendCloseoutEmailFromSupabase = async (
+  closeoutId: string,
+): Promise<CloseoutEmailStatus> => {
+  const client = ensureSupabase()
+  if (!client) return 'skipped'
+
+  const { data, error } = await client.functions.invoke('send-closeout-email', {
+    body: { closeoutId },
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (!data || typeof data !== 'object') {
+    throw new Error('Invalid response from send-closeout-email function.')
+  }
+
+  const response = data as {
+    success?: boolean
+    skipped?: boolean
+    message?: string
+  }
+
+  if (response.success) return 'sent'
+  if (response.skipped) return 'skipped'
+
+  throw new Error(response.message ?? 'Closeout email sending failed.')
 }

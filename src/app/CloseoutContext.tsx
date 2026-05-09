@@ -15,16 +15,23 @@ import {
   deactivateServerInSupabase,
   listCloseoutsFromSupabase,
   listServersFromSupabase,
+  sendCloseoutEmailFromSupabase,
   updateServerInSupabase,
   upsertCloseoutToSupabase,
 } from '../lib/supabaseStore'
 import { isSupabaseConfigured } from '../lib/supabase'
 import type {
+  CloseoutEmailStatus,
   CloseoutRecord,
   EditCloseoutPayload,
   NewCloseoutPayload,
   ServerOption,
 } from '../types/closeout'
+
+type SubmissionResult = {
+  record: CloseoutRecord
+  emailStatus: CloseoutEmailStatus
+}
 
 type CloseoutContextValue = {
   serverOptions: ServerOption[]
@@ -32,9 +39,9 @@ type CloseoutContextValue = {
   updateServerOption: (id: string, name: string) => Promise<void>
   deleteServerOption: (id: string) => Promise<void>
   closeoutHistory: CloseoutRecord[]
-  createCloseout: (payload: NewCloseoutPayload) => Promise<CloseoutRecord>
+  createCloseout: (payload: NewCloseoutPayload) => Promise<SubmissionResult>
   saveDraft: (payload: NewCloseoutPayload, existingDraftId?: string) => Promise<CloseoutRecord>
-  saveCloseoutEdit: (id: string, payload: EditCloseoutPayload) => Promise<void>
+  saveCloseoutEdit: (id: string, payload: EditCloseoutPayload) => Promise<SubmissionResult | null>
   registerDraftAutosaveHandler: (handler: (() => Promise<boolean>) | null) => void
   triggerDraftAutosave: () => Promise<boolean>
 }
@@ -161,7 +168,17 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
 
     setCloseoutHistory((prev) => [nextRecord, ...prev])
 
-    return nextRecord
+    let emailStatus: CloseoutEmailStatus = 'skipped'
+    if (payload.status === 'Submitted' && isSupabaseConfigured) {
+      try {
+        emailStatus = await sendCloseoutEmailFromSupabase(nextRecord.id)
+      } catch (error) {
+        console.error('Failed to send closeout email.', error)
+        emailStatus = 'failed'
+      }
+    }
+
+    return { record: nextRecord, emailStatus }
   }, [])
 
   const saveDraft = useCallback(async (payload: NewCloseoutPayload, existingDraftId?: string) => {
@@ -203,7 +220,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
   const saveCloseoutEdit = useCallback(async (id: string, payload: EditCloseoutPayload) => {
     const timestamp = new Date().toISOString()
     const existingRecord = closeoutHistory.find((record) => record.id === id)
-    if (!existingRecord) return
+    if (!existingRecord) return null
 
     const editedRecord: CloseoutRecord = {
       ...existingRecord,
@@ -229,6 +246,21 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     setCloseoutHistory((prev) =>
       prev.map((record) => (record.id === id ? editedRecord : record)),
     )
+
+    let emailStatus: CloseoutEmailStatus = 'skipped'
+    const becameSubmitted =
+      payload.status === 'Submitted' && existingRecord.status !== 'Submitted'
+
+    if (becameSubmitted && isSupabaseConfigured) {
+      try {
+        emailStatus = await sendCloseoutEmailFromSupabase(editedRecord.id)
+      } catch (error) {
+        console.error('Failed to send closeout email.', error)
+        emailStatus = 'failed'
+      }
+    }
+
+    return { record: editedRecord, emailStatus }
   }, [closeoutHistory])
 
   const registerDraftAutosaveHandler = useCallback((handler: (() => Promise<boolean>) | null) => {
