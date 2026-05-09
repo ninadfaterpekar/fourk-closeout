@@ -26,21 +26,55 @@ export const resolveActiveRestaurantIdFromSupabase = async (): Promise<string | 
   const client = ensureSupabase()
   if (!client) return null
 
-  const { data, error } = await client
+  const { data: restaurants, error: restaurantsError } = await client
     .from('restaurants')
     .select('id, created_at')
     .order('created_at', { ascending: true })
 
-  if (error) {
-    console.error('Failed to load restaurants.', error)
-    throw new Error(error.message)
+  if (restaurantsError) {
+    console.error('Failed to load restaurants.', restaurantsError)
+    throw new Error(restaurantsError.message)
   }
 
-  if (!data || data.length === 0) return null
-  if (data.length === 1) return data[0].id
+  if (restaurants && restaurants.length > 0) {
+    if (restaurants.length === 1) return restaurants[0].id
 
-  console.warn('Multiple restaurants found. Defaulting to the first by created_at.', data.map((row) => row.id))
-  return data[0].id
+    console.warn(
+      'Multiple restaurants found. Defaulting to the first by created_at.',
+      restaurants.map((row) => row.id),
+    )
+    return restaurants[0].id
+  }
+
+  const { data: recipientRows, error: recipientsError } = await client
+    .from('email_recipients')
+    .select('restaurant_id')
+    .eq('is_active', true)
+
+  if (recipientsError) {
+    console.error('Failed to load restaurant id fallback from email_recipients.', recipientsError)
+  } else {
+    const uniqueIds = [...new Set((recipientRows ?? []).map((row) => row.restaurant_id).filter(Boolean))]
+    if (uniqueIds.length === 1) {
+      return uniqueIds[0]
+    }
+    if (uniqueIds.length > 1) {
+      console.warn('Multiple restaurant ids found in email_recipients fallback.', uniqueIds)
+      return uniqueIds[0]
+    }
+  }
+
+  const { data: closeoutRows, error: closeoutsError } = await client
+    .from('closeouts')
+    .select('restaurant_id')
+    .limit(1)
+
+  if (closeoutsError) {
+    console.error('Failed to load restaurant id fallback from closeouts.', closeoutsError)
+    return null
+  }
+
+  return closeoutRows?.[0]?.restaurant_id ?? null
 }
 
 const rowToServerPayout = (row: {
