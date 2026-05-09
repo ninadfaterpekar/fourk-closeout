@@ -63,6 +63,13 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
   const [closeoutHistory, setCloseoutHistory] = useState<CloseoutRecord[]>(initialCloseoutHistory)
   const draftAutosaveHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
 
+  const refreshServersFromSupabase = useCallback(async () => {
+    const remoteServers = await listServersFromSupabase()
+    if (remoteServers) {
+      setServerOptions(remoteServers)
+    }
+  }, [])
+
   useEffect(() => {
     if (!isSupabaseConfigured) return
 
@@ -92,39 +99,50 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
   }, [])
 
   const addServerOption = useCallback(async (name: string) => {
-    const optimisticServer: ServerOption = { id: `srv-${crypto.randomUUID()}`, name }
-    setServerOptions((prev) => [...prev, optimisticServer])
+    if (!isSupabaseConfigured) {
+      const localServer: ServerOption = { id: `srv-${crypto.randomUUID()}`, name }
+      setServerOptions((prev) => [...prev, localServer])
+      return
+    }
 
     try {
-      const remoteServer = await createServerInSupabase(name)
-      if (!remoteServer) return
-      setServerOptions((prev) =>
-        prev.map((server) => (server.id === optimisticServer.id ? remoteServer : server)),
-      )
+      await createServerInSupabase(name)
+      await refreshServersFromSupabase()
     } catch (error) {
-      console.warn('Supabase server create failed, keeping local server option.', error)
+      console.error('Supabase server create failed.', error)
+      throw error
     }
-  }, [])
+  }, [refreshServersFromSupabase])
 
   const updateServerOption = useCallback(async (id: string, name: string) => {
-    setServerOptions((prev) => prev.map((server) => (server.id === id ? { ...server, name } : server)))
+    if (!isSupabaseConfigured) {
+      setServerOptions((prev) => prev.map((server) => (server.id === id ? { ...server, name } : server)))
+      return
+    }
 
     try {
       await updateServerInSupabase(id, name)
+      await refreshServersFromSupabase()
     } catch (error) {
-      console.warn('Supabase server update failed, keeping local update.', error)
+      console.error('Supabase server update failed.', error)
+      throw error
     }
-  }, [])
+  }, [refreshServersFromSupabase])
 
   const deleteServerOption = useCallback(async (id: string) => {
-    setServerOptions((prev) => prev.filter((server) => server.id !== id))
+    if (!isSupabaseConfigured) {
+      setServerOptions((prev) => prev.filter((server) => server.id !== id))
+      return
+    }
 
     try {
       await deactivateServerInSupabase(id)
+      await refreshServersFromSupabase()
     } catch (error) {
-      console.warn('Supabase server delete failed, keeping local delete.', error)
+      console.error('Supabase server delete failed.', error)
+      throw error
     }
-  }, [])
+  }, [refreshServersFromSupabase])
 
   const createCloseout = useCallback(async (payload: NewCloseoutPayload) => {
     const timestamp = new Date().toISOString()

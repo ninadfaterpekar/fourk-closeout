@@ -1,5 +1,5 @@
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useCloseoutContext } from '../app/CloseoutContext'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -10,11 +10,24 @@ export const AdminSettingsPage = () => {
   const [newServerName, setNewServerName] = useState('')
   const [editingServerId, setEditingServerId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
+  const [errorToast, setErrorToast] = useState('')
+
+  useEffect(() => {
+    if (!errorToast) return
+    const timeoutId = window.setTimeout(() => setErrorToast(''), 2500)
+    return () => window.clearTimeout(timeoutId)
+  }, [errorToast])
 
   const handleAddServer = async () => {
     const cleaned = newServerName.trim()
     if (!cleaned) return
-    await addServerOption(cleaned)
+    try {
+      await addServerOption(cleaned)
+    } catch (error) {
+      console.error('Failed to add server in Supabase.', error)
+      setErrorToast('Could not add server. Please try again.')
+      return
+    }
     setNewServerName('')
   }
 
@@ -27,9 +40,24 @@ export const AdminSettingsPage = () => {
     if (!editingServerId) return
     const cleaned = editingName.trim()
     if (!cleaned) return
-    await updateServerOption(editingServerId, cleaned)
+    try {
+      await updateServerOption(editingServerId, cleaned)
+    } catch (error) {
+      console.error('Failed to update server in Supabase.', error)
+      setErrorToast('Could not update server. Please try again.')
+      return
+    }
     setEditingServerId(null)
     setEditingName('')
+  }
+
+  const handleDeleteServer = async (id: string) => {
+    try {
+      await deleteServerOption(id)
+    } catch (error) {
+      console.error('Failed to delete server in Supabase.', error)
+      setErrorToast('Could not delete server. Please try again.')
+    }
   }
 
   return (
@@ -118,7 +146,7 @@ export const AdminSettingsPage = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void deleteServerOption(server.id)}
+                    onClick={() => void handleDeleteServer(server.id)}
                     className="rounded-md p-1.5 text-slate-500 transition hover:bg-red-50 hover:text-red-600"
                     aria-label="Delete server"
                   >
@@ -130,6 +158,12 @@ export const AdminSettingsPage = () => {
           ))}
         </div>
       </Card>
+
+      {errorToast && (
+        <div className="fixed bottom-5 right-6 z-[60] rounded-lg bg-red-700 px-3 py-2 text-xs font-medium text-white shadow-lg shadow-red-700/35">
+          {errorToast}
+        </div>
+      )}
     </div>
   )
 }
