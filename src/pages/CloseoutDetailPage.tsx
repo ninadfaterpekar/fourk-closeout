@@ -139,14 +139,14 @@ export const CloseoutDetailPage = () => {
     return nextErrors
   }
 
-  const saveEditsForSubmitted = () => {
+  const saveEditsForSubmitted = async () => {
     const nextErrors = validateForSubmit()
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
       return
     }
 
-    saveCloseoutEdit(record.id, {
+    await saveCloseoutEdit(record.id, {
       headerData,
       serverRows,
       pettyCashData,
@@ -159,14 +159,14 @@ export const CloseoutDetailPage = () => {
     setEditReason('')
   }
 
-  const saveDraftEdits = () => {
+  const saveDraftEdits = async () => {
     const nextErrors = validateEditReasonOnly()
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
       return
     }
 
-    saveCloseoutEdit(record.id, {
+    await saveCloseoutEdit(record.id, {
       headerData,
       serverRows,
       pettyCashData,
@@ -191,8 +191,8 @@ export const CloseoutDetailPage = () => {
     setIsSubmitConfirmOpen(true)
   }
 
-  const confirmDraftSubmit = () => {
-    saveCloseoutEdit(record.id, {
+  const confirmDraftSubmit = async () => {
+    await saveCloseoutEdit(record.id, {
       headerData,
       serverRows,
       pettyCashData,
@@ -275,7 +275,7 @@ export const CloseoutDetailPage = () => {
 
                 {record.status === 'Draft' ? (
                   <>
-                    <Button type="button" variant="ghost" className="px-3 py-2 text-xs" onClick={saveDraftEdits}>
+                    <Button type="button" variant="ghost" className="px-3 py-2 text-xs" onClick={() => void saveDraftEdits()}>
                       <Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft
                     </Button>
                     <Button type="button" variant="secondary" className="px-3 py-2 text-xs" onClick={requestDraftSubmit}>
@@ -283,7 +283,7 @@ export const CloseoutDetailPage = () => {
                     </Button>
                   </>
                 ) : (
-                  <Button type="button" variant="secondary" className="px-3 py-2 text-xs" onClick={saveEditsForSubmitted}>
+                    <Button type="button" variant="secondary" className="px-3 py-2 text-xs" onClick={() => void saveEditsForSubmitted()}>
                     <Save className="mr-1.5 h-3.5 w-3.5" /> Save Edits
                   </Button>
                 )}
@@ -380,7 +380,7 @@ export const CloseoutDetailPage = () => {
             <Button type="button" variant="ghost" className="px-3 py-2 text-xs" onClick={() => setIsSubmitConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" variant="secondary" className="px-3 py-2 text-xs" onClick={confirmDraftSubmit}>
+            <Button type="button" variant="secondary" className="px-3 py-2 text-xs" onClick={() => void confirmDraftSubmit()}>
               <Mail className="mr-1.5 h-3.5 w-3.5" /> Confirm Submit
             </Button>
           </div>

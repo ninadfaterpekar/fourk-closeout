@@ -43,10 +43,12 @@ export const AppLayout = () => {
                 onClick={() => {
                   const navigatingFromNewCloseout = location.pathname === '/new-closeout' && to !== '/new-closeout'
                   if (navigatingFromNewCloseout) {
-                    const saved = triggerDraftAutosave()
-                    if (saved) {
-                      setShowDraftToast(true)
-                    }
+                    void (async () => {
+                      const saved = await triggerDraftAutosave()
+                      if (saved) {
+                        setShowDraftToast(true)
+                      }
+                    })()
                   }
                 }}
                 className={({ isActive }) =>

@@ -184,11 +184,11 @@ export const NewCloseoutPage = () => {
   }
 
   useEffect(() => {
-    registerDraftAutosaveHandler(() => {
+    registerDraftAutosaveHandler(async () => {
       const hasChanges = currentSnapshot !== lastSavedSnapshot
       if (!hasChanges) return false
 
-      const savedRecord = saveDraft(
+      const savedRecord = await saveDraft(
         {
           headerData,
           serverRows,
@@ -215,8 +215,8 @@ export const NewCloseoutPage = () => {
     lastDraftId,
   ])
 
-  const saveDraftAndExit = () => {
-    const savedRecord = saveDraft(
+  const saveDraftAndExit = async () => {
+    const savedRecord = await saveDraft(
       {
         headerData,
         serverRows,
@@ -243,8 +243,8 @@ export const NewCloseoutPage = () => {
     setIsConfirmModalOpen(true)
   }
 
-  const confirmSubmitCloseout = () => {
-    createCloseout({
+  const confirmSubmitCloseout = async () => {
+    await createCloseout({
       headerData,
       serverRows,
       pettyCashData,
@@ -317,7 +317,7 @@ export const NewCloseoutPage = () => {
         />
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
-          <Button type="button" variant="ghost" className="px-3 py-2 text-xs" onClick={saveDraftAndExit}>
+          <Button type="button" variant="ghost" className="px-3 py-2 text-xs" onClick={() => void saveDraftAndExit()}>
             <Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft
           </Button>
           <Button type="button" variant="secondary" className="px-3 py-2 text-xs" onClick={submitCloseout}>
@@ -335,7 +335,7 @@ export const NewCloseoutPage = () => {
             <Button type="button" variant="ghost" className="px-3 py-2 text-xs" onClick={() => setIsConfirmModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" variant="secondary" className="px-3 py-2 text-xs" onClick={confirmSubmitCloseout}>
+            <Button type="button" variant="secondary" className="px-3 py-2 text-xs" onClick={() => void confirmSubmitCloseout()}>
               <Mail className="mr-1.5 h-3.5 w-3.5" /> Confirm Submit
             </Button>
           </div>
