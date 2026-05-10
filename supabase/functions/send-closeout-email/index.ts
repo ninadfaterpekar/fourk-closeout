@@ -99,6 +99,11 @@ const buildServerTotals = (rows: ServerPayoutRow[]) => {
   }
 }
 
+const getServerRowName = (row: ServerPayoutRow, serverNameMap: Map<string, string>) => {
+  if (row.row_type === 'custom') return (row.custom_name ?? '').trim()
+  return (serverNameMap.get(row.server_id ?? '') ?? '').trim()
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -225,7 +230,10 @@ Deno.serve(async (request) => {
     }
   }
 
-  const totals = buildServerTotals(serverRows)
+  const meaningfulServerRows = serverRows.filter(
+    (row) => getServerRowName(row, serverNameMap).length > 0,
+  )
+  const totals = buildServerTotals(meaningfulServerRows)
   const cashOnHand = safeNumber(pettyCash?.cash_on_hand)
   const bankWithdrawal = safeNumber(pettyCash?.bank_withdrawal)
   const actualFinalCash = safeNumber(pettyCash?.actual_physical_cash)
@@ -239,12 +247,9 @@ Deno.serve(async (request) => {
   const dayOfWeek = getDayOfWeek(closeout.business_date)
   const subject = `Fourk ${closeout.shift} Closeout: ${dateDisplay}`
 
-  const serverTableRowsHtml = serverRows
+  const serverTableRowsHtml = meaningfulServerRows
     .map((row) => {
-      const serverName =
-        row.row_type === 'custom'
-          ? row.custom_name || 'Custom Server'
-          : serverNameMap.get(row.server_id ?? '') || 'Unknown Server'
+      const serverName = getServerRowName(row, serverNameMap)
       const finalPay = calculateServerFinalPay(row)
 
       return `

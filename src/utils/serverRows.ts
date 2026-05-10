@@ -1,4 +1,5 @@
 import type { CloseoutRecord, ServerPayoutRow, ShiftType } from '../types/closeout'
+import type { ServerOption } from '../types/closeout'
 
 export const getMinimumStandardRows = (shift: ShiftType) => (shift === 'Lunch' ? 5 : 10)
 
@@ -98,4 +99,46 @@ export const buildInitialRowsForShift = (shift: ShiftType, prefillServerIds: str
   }
 
   return rows
+}
+
+const normalizeServerName = (value: string) => value.trim().toLowerCase()
+
+export const getServerRowName = (
+  row: ServerPayoutRow,
+  serverNameLookup: Map<string, string>,
+) => {
+  if (row.rowType === 'custom') return row.customName.trim()
+  return (serverNameLookup.get(row.serverId) ?? '').trim()
+}
+
+export const getDuplicateServerRowIndices = (
+  rows: ServerPayoutRow[],
+  serverOptions: ServerOption[],
+) => {
+  const serverNameLookup = new Map(serverOptions.map((server) => [server.id, server.name]))
+  const indicesByName = new Map<string, number[]>()
+
+  rows.forEach((row, index) => {
+    const name = getServerRowName(row, serverNameLookup)
+    const normalized = normalizeServerName(name)
+    if (!normalized) return
+    const existing = indicesByName.get(normalized) ?? []
+    existing.push(index)
+    indicesByName.set(normalized, existing)
+  })
+
+  const duplicates = new Set<number>()
+  for (const indices of indicesByName.values()) {
+    if (indices.length <= 1) continue
+    indices.forEach((index) => duplicates.add(index))
+  }
+  return duplicates
+}
+
+export const getMeaningfulServerRows = (
+  rows: ServerPayoutRow[],
+  serverOptions: ServerOption[],
+) => {
+  const serverNameLookup = new Map(serverOptions.map((server) => [server.id, server.name]))
+  return rows.filter((row) => getServerRowName(row, serverNameLookup).length > 0)
 }

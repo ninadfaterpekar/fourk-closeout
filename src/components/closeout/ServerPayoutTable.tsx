@@ -25,6 +25,7 @@ export const ServerPayoutTable = ({
   errors = {},
 }: ServerPayoutTableProps) => {
   const [addServerError, setAddServerError] = useState('')
+  const serverNameLookup = new Map(serverOptions.map((server) => [server.id, server.name]))
 
   const updateRow = <K extends keyof ServerPayoutRow>(index: number, key: K, value: ServerPayoutRow[K]) => {
     const updatedRows = [...rows]
@@ -77,6 +78,43 @@ export const ServerPayoutTable = ({
     onAddCustomRow()
   }
 
+  const normalizeName = (value: string) => value.trim().toLowerCase()
+
+  const getRowName = (row: ServerPayoutRow) => {
+    if (row.rowType === 'custom') return row.customName.trim()
+    return (serverNameLookup.get(row.serverId) ?? '').trim()
+  }
+
+  const getReservedNamesForRow = (rowIndex: number) => {
+    const reservedNames = new Set<string>()
+    rows.forEach((row, index) => {
+      if (index === rowIndex) return
+      const normalized = normalizeName(getRowName(row))
+      if (normalized) reservedNames.add(normalized)
+    })
+    return reservedNames
+  }
+
+  const getDuplicateRowIndices = () => {
+    const indicesByName = new Map<string, number[]>()
+    rows.forEach((row, index) => {
+      const normalized = normalizeName(getRowName(row))
+      if (!normalized) return
+      const existing = indicesByName.get(normalized) ?? []
+      existing.push(index)
+      indicesByName.set(normalized, existing)
+    })
+
+    const duplicates = new Set<number>()
+    for (const rowIndices of indicesByName.values()) {
+      if (rowIndices.length <= 1) continue
+      rowIndices.forEach((index) => duplicates.add(index))
+    }
+    return duplicates
+  }
+
+  const duplicateRowIndices = getDuplicateRowIndices()
+
   return (
     <Card
       title="Server Payout"
@@ -98,6 +136,11 @@ export const ServerPayoutTable = ({
           <tbody>
             {rows.map((row, index) => {
               const serverFinalPay = calculateServerFinalPay(row)
+              const reservedNames = getReservedNamesForRow(index)
+              const hasDuplicateError = duplicateRowIndices.has(index)
+              const serverNameError =
+                errors[`serverRows.${index}.serverName`] ??
+                (hasDuplicateError ? 'This server is already selected.' : '')
 
               return (
                 <tr key={row.id} className="border-b border-slate-100 align-top">
@@ -108,14 +151,18 @@ export const ServerPayoutTable = ({
                         value={row.serverId}
                         onChange={(event) => updateRow(index, 'serverId', event.target.value)}
                         className={`w-44 rounded-md border px-2 py-1.5 text-sm text-slate-800 outline-none transition focus:ring-2 ${
-                          errors[`serverRows.${index}.serverName`]
+                          serverNameError
                             ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
                             : 'border-slate-300 focus:border-amber-500 focus:ring-amber-200'
                         }`}
                       >
                         <option value="">Select server</option>
                         {serverOptions.map((server) => (
-                          <option key={server.id} value={server.id}>
+                          <option
+                            key={server.id}
+                            value={server.id}
+                            disabled={reservedNames.has(normalizeName(server.name))}
+                          >
                             {server.name}
                           </option>
                         ))}
@@ -128,15 +175,15 @@ export const ServerPayoutTable = ({
                         onChange={(event) => updateRow(index, 'customName', event.target.value)}
                         placeholder="Custom server name"
                         className={`w-44 rounded-md border px-2 py-1.5 text-sm text-slate-800 outline-none transition focus:ring-2 ${
-                          errors[`serverRows.${index}.serverName`]
+                          serverNameError
                             ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
                             : 'border-slate-300 focus:border-amber-500 focus:ring-amber-200'
                         }`}
                       />
                     )}
-                    {errors[`serverRows.${index}.serverName`] && (
+                    {serverNameError && (
                       <p className="mt-1 text-xs font-medium text-red-600">
-                        {errors[`serverRows.${index}.serverName`]}
+                        {serverNameError}
                       </p>
                     )}
                   </td>

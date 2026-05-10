@@ -96,7 +96,7 @@ create table if not exists activity_logs (
   actor_role text not null,
   action text not null,
   entity_type text not null,
-  entity_id text not null,
+  entity_id uuid,
   details text not null default '',
   created_at timestamptz not null default now()
 );

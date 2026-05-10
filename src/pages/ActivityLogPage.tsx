@@ -1,42 +1,70 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useAuthContext } from '../app/AuthContext'
 import { useCloseoutContext } from '../app/CloseoutContext'
+import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { SectionTitle } from '../components/ui/SectionTitle'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { listActivityLogsFromSupabase } from '../lib/supabaseStore'
 import type { ActivityLogEntry } from '../types/activity'
 import { formatDateTimeShort } from '../utils/date'
 
+const REAL_RESTAURANT_ID = '24aca723-2050-436c-b42b-c83e23428b1e'
+
 export const ActivityLogPage = () => {
+  const { user } = useAuthContext()
   const { activeRestaurantId } = useCloseoutContext()
   const [logs, setLogs] = useState<ActivityLogEntry[]>(() => [])
   const [error, setError] = useState('')
 
-  useEffect(() => {
+  const loadLogs = useCallback(async () => {
     if (!isSupabaseConfigured) return
+    try {
+      const data = await listActivityLogsFromSupabase()
+      setLogs(data ?? [])
+      setError('')
+    } catch (loadError) {
+      console.error('Failed to load activity logs.', loadError)
+      setError('Could not load activity logs.')
+    }
+  }, [])
 
-    let isMounted = true
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadLogs()
+    }, 0)
+    return () => window.clearTimeout(timeoutId)
+  }, [loadLogs])
 
-    const loadLogs = async () => {
-      if (!activeRestaurantId) return
+  const insertTestLog = async () => {
+    if (!isSupabaseConfigured || !supabase || !user) return
 
-      try {
-        const data = await listActivityLogsFromSupabase(activeRestaurantId)
-        if (!isMounted) return
-        setLogs(data ?? [])
-        setError('')
-      } catch (loadError) {
-        console.error('Failed to load activity logs.', loadError)
-        if (!isMounted) return
-        setError('Could not load activity logs.')
+    const payload = {
+      restaurant_id: activeRestaurantId ?? REAL_RESTAURANT_ID,
+      actor_pin: '192588',
+      actor_name: 'Master Admin',
+      actor_role: 'super_admin',
+      action: 'test_log',
+      entity_type: 'system',
+      entity_id: null,
+      details: {
+        message: 'Activity log test',
+      },
+    }
+
+    try {
+      console.log('Test log insert payload', payload)
+      const response = await supabase.from('activity_logs').insert(payload).select('*')
+      console.log('Test log insert response', response)
+      if (response.error) {
+        console.error('Test log insert error', response.error)
+        return
       }
+      await loadLogs()
+    } catch (insertError) {
+      console.error('Failed to insert test activity log.', insertError)
     }
-
-    void loadLogs()
-    return () => {
-      isMounted = false
-    }
-  }, [activeRestaurantId])
+  }
 
   return (
     <div className="space-y-4">
@@ -44,6 +72,18 @@ export const ActivityLogPage = () => {
         eyebrow="Audit"
         title="Activity Log"
         description="Super Admin event history for server and closeout actions."
+        actions={
+          user?.role === 'super_admin' ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="px-3 py-2 text-xs"
+              onClick={() => void insertTestLog()}
+            >
+              Test Log
+            </Button>
+          ) : undefined
+        }
       />
 
       <Card>
@@ -76,7 +116,9 @@ export const ActivityLogPage = () => {
                     <td className="py-2 pr-2 text-slate-700">{formatDateTimeShort(log.createdAt)}</td>
                     <td className="py-2 px-2 text-slate-700">{log.actorName}</td>
                     <td className="py-2 px-2 text-slate-700">{log.action}</td>
-                    <td className="py-2 px-2 text-slate-700">{log.details}</td>
+                    <td className="py-2 px-2 text-slate-700">
+                      {typeof log.details === 'string' ? log.details : JSON.stringify(log.details)}
+                    </td>
                   </tr>
                 ))}
 

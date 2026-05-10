@@ -454,28 +454,23 @@ export const createActivityLogInSupabase = async (
   })
 
   if (error) {
-    const message = error.message.toLowerCase()
-    const code = (error as { code?: string }).code ?? ''
-    if (code === '42P01' || message.includes('activity_logs')) {
-      console.warn('Activity log table unavailable. Skipping activity logging.', error)
-      return
-    }
-    throw new Error(error.message)
+    console.error('Activity log insert failed.', error)
   }
+  throwIfError(error)
 }
 
-export const listActivityLogsFromSupabase = async (
-  restaurantId: string,
-): Promise<ActivityLogEntry[] | null> => {
+export const listActivityLogsFromSupabase = async (): Promise<ActivityLogEntry[] | null> => {
   const client = ensureSupabase()
   if (!client) return null
 
+  console.log('Loading activity logs')
   const { data, error } = await client
     .from('activity_logs')
-    .select('id, restaurant_id, actor_pin, actor_name, actor_role, action, entity_type, entity_id, details, created_at')
-    .eq('restaurant_id', restaurantId)
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(300)
+  console.log('Activity logs returned data', data)
+  console.log('Activity logs returned error', error)
 
   if (error) {
     const message = error.message.toLowerCase()
@@ -495,7 +490,7 @@ export const listActivityLogsFromSupabase = async (
     actorRole: row.actor_role,
     action: row.action,
     entityType: row.entity_type,
-    entityId: row.entity_id,
+    entityId: row.entity_id ?? null,
     details: row.details,
     createdAt: row.created_at,
   }))

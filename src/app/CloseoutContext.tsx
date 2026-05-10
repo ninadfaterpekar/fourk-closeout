@@ -89,7 +89,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
   const draftAutosaveHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
 
   const logActivity = useCallback(
-    async (action: string, entityType: string, entityId: string, details: string) => {
+    async (action: string, entityType: string, entityId: string | null, details: string) => {
       if (!isSupabaseConfigured || !activeRestaurantId || !user) return
 
       try {
@@ -180,7 +180,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     try {
       await createServerInSupabase(name, effectiveRestaurantId)
       await refreshServersFromSupabase(effectiveRestaurantId)
-      await logActivity('add server', 'server', name, `Added server ${name}`)
+      await logActivity('add_server', 'server', null, `Added server ${name}`)
     } catch (error) {
       console.error('Supabase server create failed.', error)
       throw error
@@ -216,17 +216,14 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       throw new Error('No restaurant configured.')
     }
 
-    const targetName = serverOptions.find((server) => server.id === id)?.name ?? id
-
     try {
       await deactivateServerInSupabase(id)
       await refreshServersFromSupabase(activeRestaurantId)
-      await logActivity('delete server', 'server', id, `Deleted server ${targetName}`)
     } catch (error) {
       console.error('Supabase server delete failed.', error)
       throw error
     }
-  }, [activeRestaurantId, logActivity, refreshServersFromSupabase, serverOptions])
+  }, [activeRestaurantId, refreshServersFromSupabase])
 
   const createCloseout = useCallback(async (payload: NewCloseoutPayload) => {
     const timestamp = new Date().toISOString()
@@ -269,20 +266,8 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    await logActivity(
-      payload.status === 'Submitted' ? 'submit closeout' : 'create draft',
-      'closeout',
-      nextRecord.id,
-      `${payload.status} closeout ${nextRecord.id}`,
-    )
-
     if (payload.status === 'Submitted') {
-      await logActivity(
-        emailStatus === 'sent' ? 'send email success' : 'send email failure',
-        'closeout',
-        nextRecord.id,
-        `Email status: ${emailStatus}`,
-      )
+      await logActivity('submit_closeout', 'closeout', null, `Submitted closeout ${nextRecord.id}`)
     }
 
     return { record: nextRecord, emailStatus }
@@ -324,15 +309,8 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       return prev.map((record) => (record.id === draftId ? finalRecord : record))
     })
 
-    await logActivity(
-      existingDraftId ? 'update draft' : 'create draft',
-      'closeout',
-      finalRecord.id,
-      `${existingDraftId ? 'Updated' : 'Created'} draft ${finalRecord.id}`,
-    )
-
     return finalRecord
-  }, [activeRestaurantId, closeoutHistory, logActivity])
+  }, [activeRestaurantId, closeoutHistory])
 
   const saveCloseoutEdit = useCallback(async (id: string, payload: EditCloseoutPayload) => {
     const timestamp = new Date().toISOString()
@@ -395,18 +373,8 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    if (existingRecord.status === 'Submitted') {
-      await logActivity('edit submitted closeout', 'closeout', editedRecord.id, payload.reason)
-    }
-
     if (becameSubmitted) {
-      await logActivity('submit closeout', 'closeout', editedRecord.id, `Submitted draft ${editedRecord.id}`)
-      await logActivity(
-        emailStatus === 'sent' ? 'send email success' : 'send email failure',
-        'closeout',
-        editedRecord.id,
-        `Email status: ${emailStatus}`,
-      )
+      await logActivity('submit_closeout', 'closeout', null, `Submitted closeout ${editedRecord.id}`)
     }
 
     return { record: editedRecord, emailStatus }
@@ -427,12 +395,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
 
     setCloseoutHistory((prev) => prev.filter((record) => record.id !== id))
 
-    await logActivity(
-      target.status === 'Submitted' ? 'delete submitted closeout' : 'delete draft',
-      'closeout',
-      id,
-      `Deleted ${target.status.toLowerCase()} closeout ${id}`,
-    )
+    await logActivity('delete_closeout', 'closeout', null, `Deleted ${target.status.toLowerCase()} closeout ${id}`)
   }, [closeoutHistory, logActivity, user?.role])
 
   const registerDraftAutosaveHandler = useCallback((handler: (() => Promise<boolean>) | null) => {

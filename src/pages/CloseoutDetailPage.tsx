@@ -20,6 +20,8 @@ import {
 import {
   createCustomServerRow,
   createStandardServerRow,
+  getDuplicateServerRowIndices,
+  getMeaningfulServerRows,
   hasRowData,
   normalizeRowsForShift,
 } from '../utils/serverRows'
@@ -92,7 +94,11 @@ export const CloseoutDetailPage = () => {
     [serverOptions],
   )
 
-  const serverTotals = useMemo(() => calculateServerTotals(serverRows), [serverRows])
+  const meaningfulServerRows = useMemo(
+    () => getMeaningfulServerRows(serverRows, serverOptions),
+    [serverRows, serverOptions],
+  )
+  const serverTotals = useMemo(() => calculateServerTotals(meaningfulServerRows), [meaningfulServerRows])
   const pettyCashSummary = useMemo(
     () => calculatePettyCashSummary(pettyCashData, serverTotals.serverFinalPay),
     [pettyCashData, serverTotals.serverFinalPay],
@@ -157,6 +163,11 @@ export const CloseoutDetailPage = () => {
       if (!isValidMoney(row.cashPaidOut)) nextErrors[`${base}.cashPaidOut`] = 'Enter a valid non-negative number.'
       if (!isValidMoney(row.tipShare)) nextErrors[`${base}.tipShare`] = 'Enter a valid non-negative number.'
       if (!isValidMoney(row.runner)) nextErrors[`${base}.runner`] = 'Enter a valid non-negative number.'
+    })
+
+    const duplicateIndices = getDuplicateServerRowIndices(serverRows, serverOptions)
+    duplicateIndices.forEach((index) => {
+      nextErrors[`serverRows.${index}.serverName`] = 'This server is already selected.'
     })
 
     if (!isValidMoney(pettyCashData.cashOnHand)) nextErrors['pettyCash.cashOnHand'] = 'Enter a valid non-negative number.'

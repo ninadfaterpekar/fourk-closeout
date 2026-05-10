@@ -23,6 +23,8 @@ import {
   buildInitialRowsForShift,
   createCustomServerRow,
   createStandardServerRow,
+  getDuplicateServerRowIndices,
+  getMeaningfulServerRows,
   getPrefillServerIdsFromCloseout,
   hasRowData,
   normalizeRowsForShift,
@@ -144,7 +146,11 @@ export const NewCloseoutPage = () => {
     serializeDraft(initialState.headerData, initialState.serverRows, initialState.pettyCashData),
   )
 
-  const serverTotals = useMemo(() => calculateServerTotals(serverRows), [serverRows])
+  const meaningfulServerRows = useMemo(
+    () => getMeaningfulServerRows(serverRows, serverOptions),
+    [serverRows, serverOptions],
+  )
+  const serverTotals = useMemo(() => calculateServerTotals(meaningfulServerRows), [meaningfulServerRows])
   const pettyCashSummary = useMemo(
     () => calculatePettyCashSummary(pettyCashData, serverTotals.serverFinalPay),
     [pettyCashData, serverTotals.serverFinalPay],
@@ -192,6 +198,11 @@ export const NewCloseoutPage = () => {
       if (!isValidMoney(row.runner)) {
         nextErrors[`${base}.runner`] = 'Enter a valid non-negative number.'
       }
+    })
+
+    const duplicateIndices = getDuplicateServerRowIndices(serverRows, serverOptions)
+    duplicateIndices.forEach((index) => {
+      nextErrors[`serverRows.${index}.serverName`] = 'This server is already selected.'
     })
 
     if (!isValidMoney(pettyCashData.cashOnHand)) {

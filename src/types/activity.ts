@@ -6,8 +6,8 @@ export type ActivityLogEntry = {
   actorRole: string
   action: string
   entityType: string
-  entityId: string
-  details: string
+  entityId: string | null
+  details: unknown
   createdAt: string
 }
 
@@ -17,6 +17,6 @@ export type ActivityLogPayload = {
   actorRole: string
   action: string
   entityType: string
-  entityId: string
-  details: string
+  entityId: string | null
+  details: unknown
 }
