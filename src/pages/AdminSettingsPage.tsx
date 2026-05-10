@@ -12,6 +12,7 @@ export const AdminSettingsPage = () => {
   const [editingName, setEditingName] = useState('')
   const [errorToast, setErrorToast] = useState('')
   const [successToast, setSuccessToast] = useState('')
+  const [newServerInputError, setNewServerInputError] = useState('')
   const [storeName, setStoreName] = useState(() => window.localStorage.getItem('fourk.settings.storeName') ?? 'Fourk Grill - Midtown')
   const [defaultPettyCashFloat, setDefaultPettyCashFloat] = useState(
     () => window.localStorage.getItem('fourk.settings.defaultPettyCashFloat') ?? '300',
@@ -37,12 +38,20 @@ export const AdminSettingsPage = () => {
 
   const handleAddServer = async () => {
     const cleaned = newServerName.trim()
-    if (!cleaned) return
+    if (!cleaned) {
+      setNewServerInputError('Enter a server name before adding.')
+      return
+    }
+    setNewServerInputError('')
     try {
       await addServerOption(cleaned)
     } catch (error) {
       console.error('Failed to add server in Supabase.', error)
-      setErrorToast('Could not add server. Please try again.')
+      const errorMessage =
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : 'Could not add server. Please try again.'
+      setErrorToast(errorMessage)
       return
     }
     setNewServerName('')
@@ -82,7 +91,7 @@ export const AdminSettingsPage = () => {
       <SectionTitle
         eyebrow="Configuration"
         title="Admin Settings"
-        description="Store-level defaults and server roster management. Local-only state for now."
+        description="Store-level defaults and server roster management."
       />
 
       <Card title="Default Shift Settings">
@@ -117,14 +126,30 @@ export const AdminSettingsPage = () => {
           <input
             type="text"
             value={newServerName}
-            onChange={(event) => setNewServerName(event.target.value)}
+            onChange={(event) => {
+              setNewServerName(event.target.value)
+              if (newServerInputError && event.target.value.trim().length > 0) {
+                setNewServerInputError('')
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                void handleAddServer()
+              }
+            }}
             placeholder="Add new server name"
-            className="h-9 min-w-[220px] flex-1 rounded-md border border-slate-300 px-2.5 text-sm text-slate-800 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+            className={`h-9 min-w-[220px] flex-1 rounded-md border px-2.5 text-sm text-slate-800 outline-none transition focus:ring-2 ${
+              newServerInputError
+                ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
+                : 'border-slate-300 focus:border-amber-500 focus:ring-amber-200'
+            }`}
           />
           <Button type="button" className="px-3 py-2 text-xs" onClick={() => void handleAddServer()}>
             <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Server
           </Button>
         </div>
+        {newServerInputError && <p className="mb-2 text-xs font-medium text-red-600">{newServerInputError}</p>}
 
         <div className="space-y-2">
           {serverOptions.map((server) => (

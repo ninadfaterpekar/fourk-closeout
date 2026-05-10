@@ -88,6 +88,21 @@ create table if not exists email_recipients (
 
 create index if not exists idx_email_recipients_restaurant on email_recipients(restaurant_id, is_active);
 
+create table if not exists activity_logs (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references restaurants(id) on delete cascade,
+  actor_pin text not null,
+  actor_name text not null,
+  actor_role text not null,
+  action text not null,
+  entity_type text not null,
+  entity_id text not null,
+  details text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_activity_logs_restaurant_created_at on activity_logs(restaurant_id, created_at desc);
+
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to anon, authenticated;
 
@@ -99,6 +114,7 @@ alter table server_payouts enable row level security;
 alter table petty_cash_records enable row level security;
 alter table closeout_edit_history enable row level security;
 alter table email_recipients enable row level security;
+alter table activity_logs enable row level security;
 
 drop policy if exists restaurants_dev_access on restaurants;
 create policy restaurants_dev_access
@@ -201,6 +217,14 @@ with check (
 drop policy if exists email_recipients_dev_access on email_recipients;
 create policy email_recipients_dev_access
 on email_recipients
+for all
+to anon, authenticated
+using (restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid)
+with check (restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid);
+
+drop policy if exists activity_logs_dev_access on activity_logs;
+create policy activity_logs_dev_access
+on activity_logs
 for all
 to anon, authenticated
 using (restaurant_id = '24aca723-2050-436c-b42b-c83e23428b1e'::uuid)

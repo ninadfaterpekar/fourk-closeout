@@ -4,7 +4,10 @@ import type {
   ServerOption,
   ServerPayoutRow,
 } from '../types/closeout'
+import type { ActivityLogEntry, ActivityLogPayload } from '../types/activity'
 import { supabase } from './supabase'
+
+export const FALLBACK_RESTAURANT_ID = '24aca723-2050-436c-b42b-c83e23428b1e'
 
 const parseNumber = (value: number | string | null | undefined) => {
   const parsed = Number(value)
@@ -22,59 +25,59 @@ const ensureSupabase = () => {
   return supabase
 }
 
-export const resolveActiveRestaurantIdFromSupabase = async (): Promise<string | null> => {
+const logActiveRestaurantId = (restaurantId: string) => {
+  console.log(`Using active restaurant id: ${restaurantId}`)
+}
+
+export const resolveActiveRestaurantIdFromSupabase = async (): Promise<string> => {
   const client = ensureSupabase()
-  if (!client) return null
-
-  const { data: restaurants, error: restaurantsError } = await client
-    .from('restaurants')
-    .select('id, created_at')
-    .order('created_at', { ascending: true })
-
-  if (restaurantsError) {
-    console.error('Failed to load restaurants.', restaurantsError)
-    throw new Error(restaurantsError.message)
+  if (!client) {
+    console.warn('Supabase client unavailable. Using fallback restaurant id.')
+    logActiveRestaurantId(FALLBACK_RESTAURANT_ID)
+    return FALLBACK_RESTAURANT_ID
   }
 
-  if (restaurants && restaurants.length > 0) {
-    if (restaurants.length === 1) return restaurants[0].id
+  try {
+    const fourkQuery = await client
+      .from('restaurants')
+      .select('*')
+      .eq('name', 'Fourk')
+      .single()
 
-    console.warn(
-      'Multiple restaurants found. Defaulting to the first by created_at.',
-      restaurants.map((row) => row.id),
-    )
-    return restaurants[0].id
-  }
-
-  const { data: recipientRows, error: recipientsError } = await client
-    .from('email_recipients')
-    .select('restaurant_id')
-    .eq('is_active', true)
-
-  if (recipientsError) {
-    console.error('Failed to load restaurant id fallback from email_recipients.', recipientsError)
-  } else {
-    const uniqueIds = [...new Set((recipientRows ?? []).map((row) => row.restaurant_id).filter(Boolean))]
-    if (uniqueIds.length === 1) {
-      return uniqueIds[0]
+    if (!fourkQuery.error && fourkQuery.data) {
+      console.log('Restaurant query result (Fourk)', fourkQuery.data)
+      logActiveRestaurantId(fourkQuery.data.id)
+      return fourkQuery.data.id
     }
-    if (uniqueIds.length > 1) {
-      console.warn('Multiple restaurant ids found in email_recipients fallback.', uniqueIds)
-      return uniqueIds[0]
+
+    if (fourkQuery.error) {
+      console.error('Restaurant query by name failed.', fourkQuery.error)
     }
+
+    const fallbackQuery = await client.from('restaurants').select('*').limit(1)
+    if (fallbackQuery.error) {
+      console.error('Fallback restaurant query failed.', fallbackQuery.error)
+      console.warn('Using fallback restaurant id.', FALLBACK_RESTAURANT_ID)
+      return FALLBACK_RESTAURANT_ID
+    }
+
+    const firstRestaurant = fallbackQuery.data?.[0]
+    console.log('Restaurant query result (first row fallback)', firstRestaurant ?? null)
+
+    if (firstRestaurant?.id) {
+      logActiveRestaurantId(firstRestaurant.id)
+      return firstRestaurant.id
+    }
+
+    console.warn('No restaurants returned. Using fallback restaurant id.', FALLBACK_RESTAURANT_ID)
+    logActiveRestaurantId(FALLBACK_RESTAURANT_ID)
+    return FALLBACK_RESTAURANT_ID
+  } catch (error) {
+    console.error('Failed to resolve active restaurant id.', error)
+    console.warn('Using fallback restaurant id.', FALLBACK_RESTAURANT_ID)
+    logActiveRestaurantId(FALLBACK_RESTAURANT_ID)
+    return FALLBACK_RESTAURANT_ID
   }
-
-  const { data: closeoutRows, error: closeoutsError } = await client
-    .from('closeouts')
-    .select('restaurant_id')
-    .limit(1)
-
-  if (closeoutsError) {
-    console.error('Failed to load restaurant id fallback from closeouts.', closeoutsError)
-    return null
-  }
-
-  return closeoutRows?.[0]?.restaurant_id ?? null
 }
 
 const rowToServerPayout = (row: {
@@ -110,7 +113,19 @@ export const listServersFromSupabase = async (
     .eq('is_active', true)
     .order('name', { ascending: true })
 
-  throwIfError(error)
+  if (error) {
+    const message = error.message.toLowerCase()
+    if (message.includes('is_active')) {
+      const fallback = await client
+        .from('servers')
+        .select('id, name')
+        .eq('restaurant_id', restaurantId)
+        .order('name', { ascending: true })
+      throwIfError(fallback.error)
+      return (fallback.data ?? []).map((row) => ({ id: row.id, name: row.name }))
+    }
+    throw new Error(error.message)
+  }
 
   return (data ?? []).map((row) => ({ id: row.id, name: row.name }))
 }
@@ -145,17 +160,45 @@ export const createServerInSupabase = async (
   const client = ensureSupabase()
   if (!client) return null
 
+  const payload = {
+    restaurant_id: restaurantId,
+    name,
+    is_active: true,
+  }
+  console.log('Server insert payload', payload)
+
   const { data, error } = await client
     .from('servers')
-    .insert({
-      restaurant_id: restaurantId,
-      name,
-      is_active: true,
-    })
+    .insert(payload)
     .select('id, name')
     .single()
 
-  throwIfError(error)
+  if (error) {
+    const message = error.message.toLowerCase()
+    if (message.includes('is_active')) {
+      const fallback = await client
+        .from('servers')
+        .insert({
+          restaurant_id: restaurantId,
+          name,
+        })
+        .select('id, name')
+        .single()
+
+      if (fallback.error) {
+        console.error('Supabase servers insert fallback failed.', {
+          error: fallback.error,
+          payload,
+        })
+        throw new Error(fallback.error.message)
+      }
+
+      return fallback.data ? { id: fallback.data.id, name: fallback.data.name } : null
+    }
+
+    console.error('Supabase servers insert failed.', { error, payload })
+    throw new Error(error.message)
+  }
 
   return data ? { id: data.id, name: data.name } : null
 }
@@ -181,7 +224,15 @@ export const deactivateServerInSupabase = async (id: string): Promise<void> => {
     .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq('id', id)
 
-  throwIfError(error)
+  if (error) {
+    const message = error.message.toLowerCase()
+    if (message.includes('is_active')) {
+      const fallback = await client.from('servers').delete().eq('id', id)
+      throwIfError(fallback.error)
+      return
+    }
+    throw new Error(error.message)
+  }
 }
 
 export const listCloseoutsFromSupabase = async (
@@ -366,6 +417,90 @@ export const upsertCloseoutToSupabase = async (
   }
 }
 
+export const deleteCloseoutFromSupabase = async (closeoutId: string): Promise<void> => {
+  const client = ensureSupabase()
+  if (!client) return
+
+  const [payoutDelete, pettyDelete, editsDelete] = await Promise.all([
+    client.from('server_payouts').delete().eq('closeout_id', closeoutId),
+    client.from('petty_cash_records').delete().eq('closeout_id', closeoutId),
+    client.from('closeout_edit_history').delete().eq('closeout_id', closeoutId),
+  ])
+  throwIfError(payoutDelete.error)
+  throwIfError(pettyDelete.error)
+  throwIfError(editsDelete.error)
+
+  const { error } = await client.from('closeouts').delete().eq('id', closeoutId)
+  throwIfError(error)
+}
+
+export const createActivityLogInSupabase = async (
+  restaurantId: string,
+  payload: ActivityLogPayload,
+): Promise<void> => {
+  const client = ensureSupabase()
+  if (!client) return
+
+  const { error } = await client.from('activity_logs').insert({
+    restaurant_id: restaurantId,
+    actor_pin: payload.actorPin,
+    actor_name: payload.actorName,
+    actor_role: payload.actorRole,
+    action: payload.action,
+    entity_type: payload.entityType,
+    entity_id: payload.entityId,
+    details: payload.details,
+    created_at: new Date().toISOString(),
+  })
+
+  if (error) {
+    const message = error.message.toLowerCase()
+    const code = (error as { code?: string }).code ?? ''
+    if (code === '42P01' || message.includes('activity_logs')) {
+      console.warn('Activity log table unavailable. Skipping activity logging.', error)
+      return
+    }
+    throw new Error(error.message)
+  }
+}
+
+export const listActivityLogsFromSupabase = async (
+  restaurantId: string,
+): Promise<ActivityLogEntry[] | null> => {
+  const client = ensureSupabase()
+  if (!client) return null
+
+  const { data, error } = await client
+    .from('activity_logs')
+    .select('id, restaurant_id, actor_pin, actor_name, actor_role, action, entity_type, entity_id, details, created_at')
+    .eq('restaurant_id', restaurantId)
+    .order('created_at', { ascending: false })
+    .limit(300)
+
+  if (error) {
+    const message = error.message.toLowerCase()
+    const code = (error as { code?: string }).code ?? ''
+    if (code === '42P01' || message.includes('activity_logs')) {
+      console.warn('Activity log table unavailable. Returning empty activity logs.', error)
+      return []
+    }
+    throw new Error(error.message)
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    restaurantId: row.restaurant_id,
+    actorPin: row.actor_pin,
+    actorName: row.actor_name,
+    actorRole: row.actor_role,
+    action: row.action,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    details: row.details,
+    createdAt: row.created_at,
+  }))
+}
+
 export const sendCloseoutEmailFromSupabase = async (
   closeoutId: string,
   restaurantId: string,
@@ -380,8 +515,40 @@ export const sendCloseoutEmailFromSupabase = async (
   console.log('send-closeout-email response', { data, error })
 
   if (error) {
-    console.error('send-closeout-email failed.', error)
-    throw new Error(error.message)
+    const responseContext = (error as { context?: Response }).context
+    let contextPayload: unknown = null
+    let contextText: string | null = null
+    let contextStatus: number | null = null
+
+    if (responseContext) {
+      contextStatus = responseContext.status
+      try {
+        contextPayload = await responseContext.clone().json()
+      } catch {
+        try {
+          contextText = await responseContext.clone().text()
+        } catch {
+          contextText = null
+        }
+      }
+    }
+
+    console.error('send-closeout-email failed.', {
+      error,
+      status: contextStatus,
+      payload: contextPayload,
+      text: contextText,
+    })
+
+    const edgeMessage =
+      (contextPayload &&
+      typeof contextPayload === 'object' &&
+      'message' in contextPayload &&
+      typeof contextPayload.message === 'string')
+        ? contextPayload.message
+        : contextText
+
+    throw new Error(edgeMessage || error.message || 'Email failed to send.')
   }
 
   if (!data || typeof data !== 'object') {
@@ -397,5 +564,5 @@ export const sendCloseoutEmailFromSupabase = async (
   if (response.success) return 'sent'
   if (response.skipped) return 'skipped'
 
-  throw new Error(response.message ?? 'Closeout email sending failed.')
+  throw new Error(response.message ?? 'Email failed to send.')
 }

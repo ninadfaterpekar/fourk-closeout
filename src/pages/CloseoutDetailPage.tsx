@@ -53,7 +53,7 @@ const buildHistoryToastFromEmailStatus = (
   if (emailStatus === 'failed') {
     return {
       type: 'error',
-      message: 'Closeout submitted, but email failed to send.',
+      message: 'Email failed to send.',
     }
   }
 

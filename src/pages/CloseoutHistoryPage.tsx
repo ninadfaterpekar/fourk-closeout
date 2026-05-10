@@ -1,6 +1,7 @@
 import { ArrowDownUp, BanknoteArrowDown, CalendarDays, HandCoins, Plus, TrendingUp } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useAuthContext } from '../app/AuthContext'
 import { useCloseoutContext } from '../app/CloseoutContext'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -28,7 +29,8 @@ const truncateComment = (value: string) => (value.length > 80 ? `${value.slice(0
 export const CloseoutHistoryPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const { closeoutHistory } = useCloseoutContext()
+  const { user } = useAuthContext()
+  const { closeoutHistory, deleteCloseout } = useCloseoutContext()
   const state = location.state as { closeoutToast?: HistoryToastState } | null
   const [searchTerm, setSearchTerm] = useState('')
   const [sortField, setSortField] = useState<SortField>('date')
@@ -56,6 +58,38 @@ export const CloseoutHistoryPage = () => {
     }
     setSortField(field)
     setSortDirection(field === 'date' ? 'desc' : 'asc')
+  }
+
+  const handleDelete = async (
+    event: MouseEvent<HTMLButtonElement>,
+    id: string,
+    status: 'Draft' | 'Submitted',
+  ) => {
+    event.stopPropagation()
+
+    const confirmMessage =
+      status === 'Draft'
+        ? 'Delete this draft closeout?'
+        : 'Delete this submitted closeout?'
+    const confirmed = window.confirm(confirmMessage)
+    if (!confirmed) return
+
+    try {
+      await deleteCloseout(id)
+      setStatusToast({
+        type: 'success',
+        message:
+          status === 'Draft'
+            ? 'Draft closeout deleted.'
+            : 'Submitted closeout deleted.',
+      })
+    } catch (error) {
+      console.error('Failed to delete closeout.', error)
+      setStatusToast({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Could not delete closeout.',
+      })
+    }
   }
 
   const visibleRows = useMemo(() => {
@@ -211,6 +245,7 @@ export const CloseoutHistoryPage = () => {
                 <th className="pb-2 px-2 font-semibold">Difference</th>
                 <th className="pb-2 px-2 font-semibold">Comments</th>
                 <th className="pb-2 pl-2 font-semibold">Status</th>
+                <th className="pb-2 pl-2 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -246,13 +281,24 @@ export const CloseoutHistoryPage = () => {
                         {row.status}
                       </span>
                     </td>
+                    <td className="py-2 pl-2 text-right">
+                      {(row.status === 'Draft' || user?.role === 'super_admin') && (
+                        <button
+                          type="button"
+                          onClick={(event) => void handleDelete(event, row.id, row.status)}
+                          className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-700 transition hover:bg-red-50"
+                        >
+                          {row.status === 'Draft' ? 'Delete Draft' : 'Delete'}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
 
               {visibleRows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-4 text-center text-sm text-slate-500">
+                  <td colSpan={9} className="py-4 text-center text-sm text-slate-500">
                     No closeouts match your search.
                   </td>
                 </tr>

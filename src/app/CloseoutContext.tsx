@@ -11,8 +11,11 @@ import {
 } from 'react'
 import { initialCloseoutHistory, initialServerOptions } from '../data/mockCloseout'
 import {
+  FALLBACK_RESTAURANT_ID,
+  createActivityLogInSupabase,
   createServerInSupabase,
   deactivateServerInSupabase,
+  deleteCloseoutFromSupabase,
   listActiveEmailRecipientsFromSupabase,
   listCloseoutsFromSupabase,
   listServersFromSupabase,
@@ -29,6 +32,7 @@ import type {
   NewCloseoutPayload,
   ServerOption,
 } from '../types/closeout'
+import { useAuthContext } from './AuthContext'
 
 type SubmissionResult = {
   record: CloseoutRecord
@@ -37,6 +41,7 @@ type SubmissionResult = {
 
 type CloseoutContextValue = {
   activeRestaurantId: string | null
+  restaurantError: string | null
   serverOptions: ServerOption[]
   addServerOption: (name: string) => Promise<void>
   updateServerOption: (id: string, name: string) => Promise<void>
@@ -45,6 +50,7 @@ type CloseoutContextValue = {
   createCloseout: (payload: NewCloseoutPayload) => Promise<SubmissionResult>
   saveDraft: (payload: NewCloseoutPayload, existingDraftId?: string) => Promise<CloseoutRecord>
   saveCloseoutEdit: (id: string, payload: EditCloseoutPayload) => Promise<SubmissionResult | null>
+  deleteCloseout: (id: string) => Promise<void>
   registerDraftAutosaveHandler: (handler: (() => Promise<boolean>) | null) => void
   triggerDraftAutosave: () => Promise<boolean>
 }
@@ -69,7 +75,11 @@ const buildRecord = (id: string, payload: NewCloseoutPayload, createdAt: string)
 })
 
 export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
-  const [activeRestaurantId, setActiveRestaurantId] = useState<string | null>(null)
+  const { user } = useAuthContext()
+  const [activeRestaurantId, setActiveRestaurantId] = useState<string | null>(
+    isSupabaseConfigured ? FALLBACK_RESTAURANT_ID : null,
+  )
+  const [restaurantError, setRestaurantError] = useState<string | null>(null)
   const [serverOptions, setServerOptions] = useState<ServerOption[]>(
     isSupabaseConfigured ? [] : initialServerOptions,
   )
@@ -77,6 +87,27 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     isSupabaseConfigured ? [] : initialCloseoutHistory,
   )
   const draftAutosaveHandlerRef = useRef<(() => Promise<boolean>) | null>(null)
+
+  const logActivity = useCallback(
+    async (action: string, entityType: string, entityId: string, details: string) => {
+      if (!isSupabaseConfigured || !activeRestaurantId || !user) return
+
+      try {
+        await createActivityLogInSupabase(activeRestaurantId, {
+          actorPin: user.pin,
+          actorName: user.name,
+          actorRole: user.role,
+          action,
+          entityType,
+          entityId,
+          details,
+        })
+      } catch (error) {
+        console.error(`Failed to log activity: ${action}.`, error)
+      }
+    },
+    [activeRestaurantId, user],
+  )
 
   const refreshServersFromSupabase = useCallback(async (restaurantId: string) => {
     const remoteServers = await listServersFromSupabase(restaurantId)
@@ -95,25 +126,32 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
         const restaurantId = await resolveActiveRestaurantIdFromSupabase()
         console.log('Loaded active restaurant id', restaurantId)
 
-        if (!restaurantId) {
-          console.error('No restaurants found in Supabase.')
-          return
-        }
-
         if (!isMounted) return
-        setActiveRestaurantId(restaurantId)
+        setActiveRestaurantId(restaurantId || FALLBACK_RESTAURANT_ID)
+        setRestaurantError(null)
 
-        const [remoteServers, remoteCloseouts] = await Promise.all([
-          listServersFromSupabase(restaurantId),
-          listCloseoutsFromSupabase(restaurantId),
+        const [remoteServersResult, remoteCloseoutsResult] = await Promise.allSettled([
+          listServersFromSupabase(restaurantId || FALLBACK_RESTAURANT_ID),
+          listCloseoutsFromSupabase(restaurantId || FALLBACK_RESTAURANT_ID),
         ])
 
         if (!isMounted) return
 
-        if (remoteServers) setServerOptions(remoteServers)
-        if (remoteCloseouts) setCloseoutHistory(remoteCloseouts)
+        if (remoteServersResult.status === 'fulfilled') {
+          if (remoteServersResult.value) setServerOptions(remoteServersResult.value)
+        } else {
+          console.error('Failed to load servers from Supabase.', remoteServersResult.reason)
+        }
+
+        if (remoteCloseoutsResult.status === 'fulfilled') {
+          if (remoteCloseoutsResult.value) setCloseoutHistory(remoteCloseoutsResult.value)
+        } else {
+          console.error('Failed to load closeouts from Supabase.', remoteCloseoutsResult.reason)
+        }
       } catch (error) {
         console.error('Supabase load failed.', error)
+        if (!isMounted) return
+        setRestaurantError(null)
       }
     }
 
@@ -131,18 +169,23 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       return
     }
 
+    const resolvedRestaurantId = activeRestaurantId ?? (await resolveActiveRestaurantIdFromSupabase())
+    const effectiveRestaurantId = resolvedRestaurantId ?? FALLBACK_RESTAURANT_ID
     if (!activeRestaurantId) {
-      throw new Error('Missing active restaurant id for server create.')
+      setActiveRestaurantId(effectiveRestaurantId)
+      setRestaurantError(null)
+      console.log('Loaded active restaurant id', effectiveRestaurantId)
     }
 
     try {
-      await createServerInSupabase(name, activeRestaurantId)
-      await refreshServersFromSupabase(activeRestaurantId)
+      await createServerInSupabase(name, effectiveRestaurantId)
+      await refreshServersFromSupabase(effectiveRestaurantId)
+      await logActivity('add server', 'server', name, `Added server ${name}`)
     } catch (error) {
       console.error('Supabase server create failed.', error)
       throw error
     }
-  }, [activeRestaurantId, refreshServersFromSupabase])
+  }, [activeRestaurantId, logActivity, refreshServersFromSupabase])
 
   const updateServerOption = useCallback(async (id: string, name: string) => {
     if (!isSupabaseConfigured) {
@@ -151,7 +194,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (!activeRestaurantId) {
-      throw new Error('Missing active restaurant id for server update.')
+      throw new Error('No restaurant configured.')
     }
 
     try {
@@ -170,17 +213,20 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (!activeRestaurantId) {
-      throw new Error('Missing active restaurant id for server delete.')
+      throw new Error('No restaurant configured.')
     }
+
+    const targetName = serverOptions.find((server) => server.id === id)?.name ?? id
 
     try {
       await deactivateServerInSupabase(id)
       await refreshServersFromSupabase(activeRestaurantId)
+      await logActivity('delete server', 'server', id, `Deleted server ${targetName}`)
     } catch (error) {
       console.error('Supabase server delete failed.', error)
       throw error
     }
-  }, [activeRestaurantId, refreshServersFromSupabase])
+  }, [activeRestaurantId, logActivity, refreshServersFromSupabase, serverOptions])
 
   const createCloseout = useCallback(async (payload: NewCloseoutPayload) => {
     const timestamp = new Date().toISOString()
@@ -191,7 +237,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
 
     if (payload.status === 'Submitted' && isSupabaseConfigured) {
       if (!activeRestaurantId) {
-        throw new Error('Missing active restaurant id for closeout submission.')
+        throw new Error('No restaurant configured.')
       }
 
       const recipients = await listActiveEmailRecipientsFromSupabase(activeRestaurantId)
@@ -203,7 +249,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
 
     if (isSupabaseConfigured) {
       if (!activeRestaurantId) {
-        throw new Error('Missing active restaurant id for closeout save.')
+        throw new Error('No restaurant configured.')
       }
       await upsertCloseoutToSupabase(nextRecord, activeRestaurantId)
     }
@@ -214,7 +260,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     if (payload.status === 'Submitted' && isSupabaseConfigured) {
       try {
         if (!activeRestaurantId) {
-          throw new Error('Missing active restaurant id for closeout email.')
+          throw new Error('No restaurant configured.')
         }
         emailStatus = await sendCloseoutEmailFromSupabase(nextRecord.id, activeRestaurantId)
       } catch (error) {
@@ -223,8 +269,24 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
+    await logActivity(
+      payload.status === 'Submitted' ? 'submit closeout' : 'create draft',
+      'closeout',
+      nextRecord.id,
+      `${payload.status} closeout ${nextRecord.id}`,
+    )
+
+    if (payload.status === 'Submitted') {
+      await logActivity(
+        emailStatus === 'sent' ? 'send email success' : 'send email failure',
+        'closeout',
+        nextRecord.id,
+        `Email status: ${emailStatus}`,
+      )
+    }
+
     return { record: nextRecord, emailStatus }
-  }, [activeRestaurantId])
+  }, [activeRestaurantId, logActivity])
 
   const saveDraft = useCallback(async (payload: NewCloseoutPayload, existingDraftId?: string) => {
     const timestamp = new Date().toISOString()
@@ -251,7 +313,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
 
     if (isSupabaseConfigured) {
       if (!activeRestaurantId) {
-        throw new Error('Missing active restaurant id for draft save.')
+        throw new Error('No restaurant configured.')
       }
       await upsertCloseoutToSupabase(finalRecord, activeRestaurantId)
     }
@@ -262,8 +324,15 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       return prev.map((record) => (record.id === draftId ? finalRecord : record))
     })
 
+    await logActivity(
+      existingDraftId ? 'update draft' : 'create draft',
+      'closeout',
+      finalRecord.id,
+      `${existingDraftId ? 'Updated' : 'Created'} draft ${finalRecord.id}`,
+    )
+
     return finalRecord
-  }, [activeRestaurantId, closeoutHistory])
+  }, [activeRestaurantId, closeoutHistory, logActivity])
 
   const saveCloseoutEdit = useCallback(async (id: string, payload: EditCloseoutPayload) => {
     const timestamp = new Date().toISOString()
@@ -289,7 +358,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
 
     if (payload.status === 'Submitted' && isSupabaseConfigured) {
       if (!activeRestaurantId) {
-        throw new Error('Missing active restaurant id for closeout submission.')
+        throw new Error('No restaurant configured.')
       }
 
       const recipients = await listActiveEmailRecipientsFromSupabase(activeRestaurantId)
@@ -301,7 +370,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
 
     if (isSupabaseConfigured) {
       if (!activeRestaurantId) {
-        throw new Error('Missing active restaurant id for closeout edit save.')
+        throw new Error('No restaurant configured.')
       }
       await upsertCloseoutToSupabase(editedRecord, activeRestaurantId, payload.reason)
     }
@@ -317,7 +386,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
     if (becameSubmitted && isSupabaseConfigured) {
       try {
         if (!activeRestaurantId) {
-          throw new Error('Missing active restaurant id for closeout email.')
+          throw new Error('No restaurant configured.')
         }
         emailStatus = await sendCloseoutEmailFromSupabase(editedRecord.id, activeRestaurantId)
       } catch (error) {
@@ -326,8 +395,45 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
+    if (existingRecord.status === 'Submitted') {
+      await logActivity('edit submitted closeout', 'closeout', editedRecord.id, payload.reason)
+    }
+
+    if (becameSubmitted) {
+      await logActivity('submit closeout', 'closeout', editedRecord.id, `Submitted draft ${editedRecord.id}`)
+      await logActivity(
+        emailStatus === 'sent' ? 'send email success' : 'send email failure',
+        'closeout',
+        editedRecord.id,
+        `Email status: ${emailStatus}`,
+      )
+    }
+
     return { record: editedRecord, emailStatus }
-  }, [activeRestaurantId, closeoutHistory])
+  }, [activeRestaurantId, closeoutHistory, logActivity])
+
+  const deleteCloseout = useCallback(async (id: string) => {
+    const target = closeoutHistory.find((record) => record.id === id)
+    if (!target) return
+
+    const isSuperAdmin = user?.role === 'super_admin'
+    if (target.status === 'Submitted' && !isSuperAdmin) {
+      throw new Error('Only Super Admin can delete submitted closeouts.')
+    }
+
+    if (isSupabaseConfigured) {
+      await deleteCloseoutFromSupabase(id)
+    }
+
+    setCloseoutHistory((prev) => prev.filter((record) => record.id !== id))
+
+    await logActivity(
+      target.status === 'Submitted' ? 'delete submitted closeout' : 'delete draft',
+      'closeout',
+      id,
+      `Deleted ${target.status.toLowerCase()} closeout ${id}`,
+    )
+  }, [closeoutHistory, logActivity, user?.role])
 
   const registerDraftAutosaveHandler = useCallback((handler: (() => Promise<boolean>) | null) => {
     draftAutosaveHandlerRef.current = handler
@@ -341,6 +447,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
   const value = useMemo(
     () => ({
       activeRestaurantId,
+      restaurantError,
       serverOptions,
       addServerOption,
       updateServerOption,
@@ -349,11 +456,13 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       createCloseout,
       saveDraft,
       saveCloseoutEdit,
+      deleteCloseout,
       registerDraftAutosaveHandler,
       triggerDraftAutosave,
     }),
     [
       activeRestaurantId,
+      restaurantError,
       serverOptions,
       addServerOption,
       updateServerOption,
@@ -362,6 +471,7 @@ export const CloseoutProvider = ({ children }: { children: ReactNode }) => {
       createCloseout,
       saveDraft,
       saveCloseoutEdit,
+      deleteCloseout,
       registerDraftAutosaveHandler,
       triggerDraftAutosave,
     ],

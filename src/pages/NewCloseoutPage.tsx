@@ -52,7 +52,7 @@ const buildHistoryToastFromEmailStatus = (
   if (emailStatus === 'failed') {
     return {
       type: 'error',
-      message: 'Closeout submitted, but email failed to send.',
+      message: 'Email failed to send.',
     }
   }
 
@@ -259,6 +259,7 @@ export const NewCloseoutPage = () => {
           return
         }
 
+        console.log('Loading active email recipients for restaurant', activeRestaurantId)
         const recipients = await listActiveEmailRecipientsFromSupabase(activeRestaurantId)
         if (!isMounted) return
         const emails = recipients ?? []
@@ -506,7 +507,7 @@ export const NewCloseoutPage = () => {
               <span className="font-semibold">To:</span>{' '}
               {recipientEmails.length > 0
                 ? recipientEmails.join(', ')
-                : 'No active recipients configured'}
+                : `No active recipients configured for restaurant ${activeRestaurantId ?? 'unknown'}`}
             </p>
             <p><span className="font-semibold">Subject:</span> {headerData.shift} Closeout - {formatDisplayDate(headerData.businessDate)}</p>
             <p className="pt-1">

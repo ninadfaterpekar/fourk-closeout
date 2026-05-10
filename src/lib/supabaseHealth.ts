@@ -1,5 +1,5 @@
 import { isSupabaseConfigured, supabase } from './supabase'
-import { resolveActiveRestaurantIdFromSupabase } from './supabaseStore'
+import { FALLBACK_RESTAURANT_ID, resolveActiveRestaurantIdFromSupabase } from './supabaseStore'
 
 const getMissingEnvVars = () => {
   const missing: string[] = []
@@ -33,9 +33,10 @@ export const runSupabaseHealthCheck = async () => {
 
     try {
       const restaurantId = await resolveActiveRestaurantIdFromSupabase()
-      console.info(`[Supabase Health] Loaded active restaurant id: ${restaurantId ?? 'none'}`)
+      console.info(`[Supabase Health] Loaded active restaurant id: ${restaurantId}`)
     } catch (restaurantError) {
       console.error('[Supabase Health] Restaurant loading failed.', restaurantError)
+      console.info(`[Supabase Health] Loaded active restaurant id: ${FALLBACK_RESTAURANT_ID}`)
     }
   } catch (error) {
     console.error('[Supabase Health] Connection check failed.', error)

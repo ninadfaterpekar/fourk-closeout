@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react'
-import { History, Settings, UtensilsCrossed } from 'lucide-react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { ClipboardList, History, Lock, Settings, UtensilsCrossed } from 'lucide-react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useAuthContext } from '../app/AuthContext'
 import { useCloseoutContext } from '../app/CloseoutContext'
 
-const navItems = [
-  { to: '/closeout-history', label: 'Closeout History', icon: History },
-  { to: '/admin-settings', label: 'Admin Settings', icon: Settings },
-]
-
 export const AppLayout = () => {
+  const navigate = useNavigate()
   const location = useLocation()
-  const { triggerDraftAutosave } = useCloseoutContext()
+  const { user, logout } = useAuthContext()
+  const { restaurantError, triggerDraftAutosave } = useCloseoutContext()
   const [showDraftToast, setShowDraftToast] = useState(false)
+  const navItems = [
+    { to: '/closeout-history', label: 'Closeout History', icon: History },
+    { to: '/admin-settings', label: 'Admin Settings', icon: Settings },
+    ...(user?.role === 'super_admin'
+      ? [{ to: '/activity-log', label: 'Log', icon: ClipboardList }]
+      : []),
+  ]
 
   useEffect(() => {
     if (!showDraftToast) return
@@ -64,9 +69,37 @@ export const AppLayout = () => {
               </NavLink>
             ))}
           </nav>
+
+          <div className="mt-6 border-t border-slate-200 pt-4">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              {user?.name ?? 'User'} ({user?.role === 'super_admin' ? 'Super Admin' : 'Manager'})
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
+                  if (location.pathname === '/new-closeout') {
+                    const saved = await triggerDraftAutosave()
+                    if (saved) setShowDraftToast(true)
+                  }
+                  await logout()
+                  navigate('/login', { replace: true })
+                })()
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
+            >
+              <Lock className="h-4 w-4" />
+              Logout / Lock
+            </button>
+          </div>
         </aside>
 
         <main className="min-w-0 flex-1 rounded-2xl border border-slate-800/10 bg-white/80 p-4 shadow-xl shadow-slate-800/10 backdrop-blur-lg sm:p-5">
+          {restaurantError && (
+            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {restaurantError}
+            </div>
+          )}
           <Outlet />
         </main>
       </div>

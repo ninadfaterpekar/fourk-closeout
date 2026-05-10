@@ -325,11 +325,28 @@ Deno.serve(async (request) => {
 
   const resendPayload = await resendResponse.json().catch(() => null)
   if (!resendResponse.ok) {
+    console.error('Resend API request failed.', {
+      status: resendResponse.status,
+      statusText: resendResponse.statusText,
+      payload: resendPayload,
+    })
+
+    const resendMessage =
+      resendPayload &&
+      typeof resendPayload === 'object' &&
+      'message' in resendPayload &&
+      typeof resendPayload.message === 'string'
+        ? resendPayload.message
+        : null
+
     return jsonResponse(
       {
         success: false,
-        message: 'Resend API request failed.',
+        message:
+          resendMessage ??
+          `Resend API request failed with status ${resendResponse.status} ${resendResponse.statusText}.`,
         resend: resendPayload,
+        status: resendResponse.status,
       },
       502,
     )

@@ -9,5 +9,11 @@ console.info('[Supabase Boot] VITE_SUPABASE_PUBLISHABLE_KEY exists:', Boolean(su
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey)
 
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseKey)
+  ? createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    })
   : null
